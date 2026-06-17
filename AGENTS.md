@@ -72,7 +72,8 @@ LMDB is single-process: only one JVM can hold the path at a time.
 
 ## Architecture
 
-- `datom.mcp` — MCP server (7 tools) + JSON HTTP API (planned, port 9091)
+- `datom.mcp` — MCP server (9 tools, port 9090)
+- `datom.api` — JSON HTTP API (5 routes, port 9091)
 - `datom.core` — orchestrator (9 public primitives)
 - `datom.store` — schema, LMDB connections, CRUD
 - `datom.chunk` — paragraph splitting with overlap (pure)
@@ -110,10 +111,12 @@ Server path: `store-init → init-search!` (once). Then per-ingest: `ingest/inge
 | context | Search + graph neighbor expansion |
 | lookup | Pull document by ID |
 | stats | System statistics |
-| graph-expand | 1-hop neighborhood |
+| graph-expand | 1-hop neighborhood with titles |
 | ingest-luds | Ingest LUDS markdown from directory |
+| remember | Store a new document |
+| forget | Remove a document by ID |
 
-Planned: `remember`, `forget`, `update`
+Planned: `update`
 
 ## Workflow
 
@@ -125,15 +128,15 @@ Planned: `remember`, `forget`, `update`
 
 See `doc/HANDOFF.md` for full plan. Summary:
 
-| Phase | What | Key items |
-|-------|------|-----------|
-| A | Core fixes | Deduplicate chunking, map args, fix redundant init-search!, validate bounds |
-| B | MCP compliance | Handle initialized notification, fix errors, TOCTOU race, logging |
-| C | Write tools | remember, forget |
-| D | JSON API | Thin http-kit server on 9091 for Hermes plugin |
-| E | Hermes plugin | Python MemoryProvider in plugins/memory/datom/ |
-| F | Tests | Incremental, alongside each phase |
-| G | Polish | README, portable deps, graph-expand titles, shutdown hook |
+| Phase | What | Status |
+|-------|------|--------|
+| A | Core fixes | Done |
+| B | MCP compliance | Done |
+| C | Write tools (remember/forget) | Done |
+| D | JSON API on 9091 | Done |
+| E | Hermes plugin | Pending |
+| F | Integration tests | Done (F1-F6) |
+| G | Polish (titles, shutdown hook) | Done |
 
 ## Hermes Integration
 
