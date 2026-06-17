@@ -1,7 +1,10 @@
 (ns datom.api
   (:require [datom.core :as datom]
+            [datom.index :as index]
+            [datom.store :as store]
             [cheshire.core :as json]
-            [org.httpkit.server :as http]))
+            [org.httpkit.server :as http])
+  (:gen-class))
 
 (defn- json-response [status body]
   {:status status
@@ -42,3 +45,12 @@
 
 (defn start-server [sys & [{:keys [port host] :or {port 0 host "127.0.0.1"}}]]
   (http/run-server (partial handler sys) {:port port :host host}))
+
+(defn -main [& args]
+  (let [sys (-> (datom/store-init) index/init-search!)
+        port (Long/parseLong (or (first args) (System/getenv "DATOM_API_PORT") "9091"))
+        host (or (System/getenv "DATOM_API_HOST") "127.0.0.1")]
+    (println "Starting datom-api on" (str host ":" port))
+    (start-server sys {:port port :host host})
+    (.addShutdownHook (Runtime/getRuntime) (Thread. #(store/close! sys)))
+    @(promise)))
