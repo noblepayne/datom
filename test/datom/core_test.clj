@@ -3,7 +3,6 @@
             [datom.core :as datom]
             [datom.index :as index]
             [datom.store :as store]
-            [datom.ingest :as ingest]
             [datom.ingest.luds :as luds]
             [datom.chunk :as chunk]
             [datom.graph :as graph]
@@ -102,3 +101,101 @@
         (let [deps (graph/dependents sys "lud-0")]
           (is (some #(= % "lud-2") deps))
           (is (some #(= % "lud-1") deps)))))))
+
+(deftest test-graph-expand
+  (testing "graph-expand returns neighbors with titles"
+    (with-temp-store [sys]
+      (let [sys (-> sys
+                    (index/init-search!)
+                    (datom/ingest (luds/dir-source "test/fixtures/luds")))]
+        (let [result (datom/graph-expand sys "lud-0")]
+          (is (= "lud-0" (:id result)))
+          (is (vector? (:neighbors result)))
+          (is (vector? (:dependents result)))
+          (is (some #(= "lud-0" (:id %)) (:neighbors result)))
+          (is (every? :title (:neighbors result)))
+          (is (every? :title (:dependents result)))))))
+  (testing "graph-expand for lud-2 shows lud-0 in neighbors"
+    (with-temp-store [sys]
+      (let [sys (-> sys
+                    (index/init-search!)
+                    (datom/ingest (luds/dir-source "test/fixtures/luds")))]
+        (let [result (datom/graph-expand sys "lud-2")]
+          (is (some #(= "lud-0" (:id %)) (:neighbors result))))))))
+
+(deftest test-context
+  (testing "context returns results and neighbor map"
+    (with-temp-store [sys]
+      (let [sys (-> sys
+                    (index/init-search!)
+                    (datom/ingest (luds/dir-source "test/fixtures/luds")))]
+        (let [result (datom/context sys "summary" {:top 3})]
+          (is (vector? (:results result)))
+          (is (map? (:neighbors result)))
+          (is (pos? (count (:results result))))
+          (doseq [r (:results result)]
+            (is (:id r))
+            (is (contains? (:neighbors result) (:id r))))
+          (doseq [[id neighbors] (:neighbors result)]
+            (is (vector? neighbors))
+            (is (some #(= % id) neighbors) "each doc is its own neighbor")))))))
+
+(deftest test-search-ranking
+  (testing "search with :raw returns rank metadata"
+    (with-temp-store [sys]
+      (let [sys (-> sys
+                    (index/init-search!)
+                    (datom/ingest (luds/dir-source "test/fixtures/luds")))]
+        (let [results (datom/search sys "summary" {:top 3 :raw true})]
+          (is (pos? (count results)))
+          (is (every? :rrf results))
+          (is (every? :ft-rank results))
+          (is (every? :sem-rank results))
+          (let [rrfs (map :rrf results)]
+            (is (= rrfs (sort > rrfs)) "results sorted by rrf descending")))))))
+
+(deftest test-answer-format
+  (testing "answer returns formatted string with bullets and IDs"
+    (with-temp-store [sys]
+      (let [sys (-> sys
+                    (index/init-search!)
+                    (datom/ingest (luds/dir-source "test/fixtures/luds")))]
+        (let [result (datom/answer sys "summary")]
+          (is (string? result))
+          (is (re-find #"summary" result) "contains the query")
+          (is (re-find #"• " result) "contains bullet markers")
+          (is (re-find #"lud-0" result) "contains a doc ID"))))))
+
+(deftest test-filter-by-author
+  (testing "search with :author filters by LUDS author"
+    (with-temp-store [sys]
+      (let [sys (-> sys
+                    (index/init-search!)
+                    (datom/ingest (luds/dir-source "test/fixtures/luds")))]
+        (let [all (datom/search sys "LNURL" {:top 20})
+              filtered (datom/search sys "LNURL" {:top 20 :author "fiatjaf"})
+              excluded (datom/search sys "LNURL" {:top 20 :author "nonexistent"})]
+          (is (pos? (count all)))
+          (is (pos? (count filtered)) "fiatjaf authored LUDS fixtures")
+          (is (every? (set (map :id all)) (map :id filtered))
+              "filtered results are a subset of unfiltered")
+          (is (empty? excluded) "nonexistent author returns nothing"))))))
+
+(deftest test-forget-edge-cases
+  (testing "forget nonexistent returns {:deleted false}"
+    (with-temp-store [sys]
+      (let [sys (index/init-search! sys)]
+        (is (= {:deleted false} (datom/forget sys "does-not-exist"))))))
+  (testing "forget then lookup returns nil"
+    (with-temp-store [sys]
+      (let [sys (index/init-search! sys)
+            {:keys [id]} (datom/remember sys {:title "X" :body "Y"})]
+        (is (some? (datom/lookup sys id)))
+        (datom/forget sys id)
+        (is (nil? (datom/lookup sys id))))))
+  (testing "double-forget returns {:deleted false} second time"
+    (with-temp-store [sys]
+      (let [sys (index/init-search! sys)
+            {:keys [id]} (datom/remember sys {:title "X" :body "Y"})]
+        (is (:deleted (datom/forget sys id)))
+        (is (not (:deleted (datom/forget sys id))))))))

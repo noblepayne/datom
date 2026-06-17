@@ -25,11 +25,6 @@
   (let [resp @(http/delete url {:headers {"MCP-Session-Id" sid}})]
     (:status resp)))
 
-(defn- clean-db!
-  []
-  (io/delete-file "/tmp/datom-test-mcp-db" true)
-  (io/delete-file "/tmp/datom-test-mcp-search" true))
-
 (defn- temp-dir []
   (str "/tmp/datom-mcp-test-" (java.util.UUID/randomUUID)))
 
@@ -92,8 +87,8 @@
               (is (re-find #"id" body)))))
         (testing "forget deletes a document"
           (let [body (get-in (mcp-request url sid "tools/call"
-                                           :params {:name "remember"
-                                                    :arguments {:title "To Delete" :body "delete me"}})
+                                          :params {:name "remember"
+                                                   :arguments {:title "To Delete" :body "delete me"}})
                              [:body :result :content 0 :text])
                 id (get (json/parse-string body) "id")
                 resp (mcp-request url sid "tools/call"
@@ -101,6 +96,34 @@
             (is (= 200 (:status resp)))
             (let [body (get-in resp [:body :result :content 0 :text])]
               (is (re-find #"true" body)))))
+        (mcp-delete url sid))
+      (finally
+        (io/delete-file db-dir true)
+        (io/delete-file search-dir true)))))
+
+(deftest test-mcp-error-paths
+  (let [db-dir (temp-dir)
+        search-dir (temp-dir)]
+    (try
+      (let [sys (-> (datom/store-init {:datom.store/db-dir db-dir
+                                       :datom.store/search-dir search-dir})
+                    (index/init-search!))
+            stop-fn (mcp/start-server sys {:port 0})
+            port (-> stop-fn meta :local-port)
+            url (str "http://127.0.0.1:" port "/mcp")
+            sid (-> (mcp-request url nil "initialize") :session-id)]
+        (testing "unknown tool returns error"
+          (let [resp (mcp-request url sid "tools/call"
+                                  :params {:name "nonexistent" :arguments {}})]
+            (is (= 200 (:status resp)))
+            (is (get-in resp [:body :error]))
+            (is (= -32602 (get-in resp [:body :error :code])))))
+        (testing "forget nonexistent returns deleted=false"
+          (let [resp (mcp-request url sid "tools/call"
+                                  :params {:name "forget" :arguments {:id "ghost"}})]
+            (is (= 200 (:status resp)))
+            (let [body (get-in resp [:body :result :content 0 :text])]
+              (is (re-find #"false" body)))))
         (mcp-delete url sid))
       (finally
         (io/delete-file db-dir true)
