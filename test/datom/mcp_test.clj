@@ -38,7 +38,7 @@
           (let [resp (mcp-request url sid "tools/list")]
             (is (= 200 (:status resp)))
             (let [tool-names (mapv :name (get-in resp [:body :result :tools]))]
-              (is (= #{"search" "answer" "context" "lookup" "stats" "graph-expand"}
+              (is (= #{"search" "answer" "context" "lookup" "stats" "graph-expand" "ingest-luds"}
                      (set tool-names))))))
         (testing "tools/call stats returns stats"
           (let [resp (mcp-request url sid "tools/call" :params {:name "stats" :arguments {}})]
