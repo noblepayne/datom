@@ -136,7 +136,7 @@ See `doc/HANDOFF.md` for full plan. Summary:
 | D | JSON API on 9091 | Done |
 | E | Hermes plugin | Done |
 | F | Integration tests | Done (F1-F6) |
-| G | Polish (titles, shutdown hook) | Done |
+| G | Polish (titles, shutdown hook, README, Maven coord) | Done |
 
 ## Hermes Integration
 

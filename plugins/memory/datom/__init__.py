@@ -121,6 +121,8 @@ class DatomMemoryProvider:
         self._client = client  # Injectable for testing
         self._sync_thread: Optional[threading.Thread] = None
         self._compress_thread: Optional[threading.Thread] = None
+        self._sync_lock = threading.Lock()
+        self._compress_lock = threading.Lock()
 
     @property
     def name(self) -> str:
@@ -154,8 +156,8 @@ class DatomMemoryProvider:
                 try:
                     config = json.loads(config_path.read_text())
                     self._base_url = config.get("datom_url", self._base_url)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("Failed to load datom config: %s", e)
 
         # Env var override
         env_url = os.environ.get("DATOM_URL")
@@ -177,7 +179,7 @@ class DatomMemoryProvider:
         return TOOL_SCHEMAS
 
     def handle_tool_call(self, tool_name: str, args: Dict[str, Any], **kwargs) -> str:
-        endpoint = tool_name.replace("datom_", "")
+        endpoint = tool_name.removeprefix("datom_")
         result = self._post(f"/api/{endpoint}", args)
         return json.dumps(result)
 
@@ -212,9 +214,10 @@ class DatomMemoryProvider:
                 },
             )
 
-        self._join_thread(self._sync_thread)
-        self._sync_thread = threading.Thread(target=_sync, daemon=True)
-        self._sync_thread.start()
+        with self._sync_lock:
+            self._join_thread(self._sync_thread)
+            self._sync_thread = threading.Thread(target=_sync, daemon=True)
+            self._sync_thread.start()
 
     def on_pre_compress(self, messages: List[Dict[str, Any]]) -> str:
         """Extract insights before compression discards messages.
@@ -250,16 +253,19 @@ class DatomMemoryProvider:
                         },
                     )
             except Exception as e:
-                logger.debug("datom pre-compression flush failed: %s", e)
+                logger.warning("datom pre-compression flush failed: %s", e)
 
-        self._join_thread(self._compress_thread)
-        self._compress_thread = threading.Thread(target=_flush, daemon=True)
-        self._compress_thread.start()
+        with self._compress_lock:
+            self._join_thread(self._compress_thread)
+            self._compress_thread = threading.Thread(target=_flush, daemon=True)
+            self._compress_thread.start()
         return ""
 
     def shutdown(self) -> None:
-        self._join_thread(self._sync_thread)
-        self._join_thread(self._compress_thread)
+        with self._sync_lock:
+            self._join_thread(self._sync_thread)
+        with self._compress_lock:
+            self._join_thread(self._compress_thread)
         if self._client:
             self._client.close()
 

@@ -28,6 +28,10 @@ from plugins.memory.datom import (
 # ---------------------------------------------------------------------------
 
 
+class _MockHTTPError(Exception):
+    """Stand-in for httpx.HTTPStatusError in tests (httpx not always available)."""
+
+
 class MockResponse:
     """Minimal httpx.Response stand-in."""
 
@@ -40,7 +44,7 @@ class MockResponse:
 
     def raise_for_status(self):
         if self.status_code >= 400:
-            raise Exception(f"HTTP {self.status_code}")
+            raise _MockHTTPError(f"HTTP {self.status_code}")
 
 
 class MockClient:
@@ -65,6 +69,18 @@ class MockClient:
 
     def close(self):
         pass
+
+
+def _wait_for_call(client, endpoint, min_calls=1, timeout=1.0):
+    """Poll client._calls until expected endpoint appears, or timeout."""
+    import time
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        matched = [c for c in client._calls if endpoint in c[1]]
+        if len(matched) >= min_calls:
+            return matched
+        time.sleep(0.005)
+    return []
 
 
 # ---------------------------------------------------------------------------
@@ -114,15 +130,9 @@ def test_name():
 def test_is_available_default():
     """Always available — let initialize() verify."""
     p = DatomMemoryProvider()
-    env = os.environ.copy()
-    env.pop("DATOM_URL", None)
-    with tempfile.TemporaryDirectory() as td:
-        with tempfile.TemporaryDirectory() as hermes_home:
-            env["HERMES_HOME"] = hermes_home
-            with pytest.MonkeyPatch.context() as m:
-                for k, v in env.items():
-                    m.setenv(k, v)
-                assert p.is_available() is True
+    with pytest.MonkeyPatch.context() as m:
+        m.delenv("DATOM_URL", raising=False)
+        assert p.is_available() is True
 
 
 def test_is_available_with_env_var():
@@ -187,6 +197,30 @@ def test_handle_tool_call_forget(provider):
 def test_handle_tool_call_stats(provider):
     result = json.loads(provider.handle_tool_call("datom_stats", {}))
     assert result["doc-count"] == 42
+
+
+def test_post_returns_empty_on_server_error():
+    """_post should return {} on HTTP errors."""
+    client = MockClient({})
+    p = DatomMemoryProvider(client=client)
+    result = p._post("/api/search", {"query": "test"})
+    assert result == {}
+
+
+def test_post_returns_empty_without_client():
+    """_post should return {} when client is None."""
+    p = DatomMemoryProvider()
+    assert p._client is None
+    result = p._post("/api/search", {"query": "test"})
+    assert result == {}
+
+
+def test_prefetch_handles_server_error_gracefully():
+    """prefetch should return '' when the server returns an error."""
+    client = MockClient({})  # No matching routes → 404 → _post returns {}
+    p = DatomMemoryProvider(client=client)
+    text = p.prefetch("anything")
+    assert text == ""
 
 
 # ---------------------------------------------------------------------------
@@ -277,10 +311,7 @@ def test_format_context_strips_newlines():
 
 def test_sync_turn_stores_conversation(provider):
     provider.sync_turn("what is LNURL?", "LNURL is...")
-    # Wait for daemon thread
-    time.sleep(0.1)
-    # Check the mock received the call
-    remember_calls = [c for c in provider._client._calls if "/api/remember" in c[1]]
+    remember_calls = _wait_for_call(provider._client, "/api/remember")
     assert len(remember_calls) >= 1
     body = remember_calls[0][2]["body"]
     assert "User: what is LNURL?" in body
@@ -297,8 +328,7 @@ def test_sync_turn_non_blocking(provider):
 
 def test_sync_turn_type_conversation(provider):
     provider.sync_turn("a", "b")
-    time.sleep(0.1)
-    remember_calls = [c for c in provider._client._calls if "/api/remember" in c[1]]
+    remember_calls = _wait_for_call(provider._client, "/api/remember")
     assert remember_calls[0][2]["type"] == "conversation"
 
 
@@ -336,8 +366,7 @@ def test_on_pre_compress_saves_context():
     p = DatomMemoryProvider(client=client)
     messages = [{"role": "user", "content": "tell me about LNURL"}]
     p.on_pre_compress(messages)
-    time.sleep(0.2)
-    remember_calls = [c for c in client._calls if "/api/remember" in c[1]]
+    remember_calls = _wait_for_call(client, "/api/remember")
     assert len(remember_calls) >= 1
     assert "Pre-compression context" in remember_calls[0][2]["body"]
 
@@ -350,8 +379,7 @@ def test_on_pre_compress_skips_non_user_messages():
         {"role": "system", "content": "you are helpful"},
     ]
     p.on_pre_compress(messages)
-    time.sleep(0.1)
-    search_calls = [c for c in client._calls if "/api/search" in c[1]]
+    search_calls = _wait_for_call(client, "/api/search", timeout=0.3)
     assert len(search_calls) == 0  # No user messages → no search
 
 

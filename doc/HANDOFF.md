@@ -180,13 +180,13 @@ Add as we go, don't defer all to the end. Key tests:
 
 ### Phase G — DX polish
 
-| # | Item | Description |
-|---|------|-------------|
-| G1 | README.md at repo root | Port from DEMO.md |
-| G2 | Document Nix dep; Maven coords as canonical | Portable builds |
-| G3 | `graph-expand` returns `[{:id :title}]` | Currently returns just IDs |
-| G4 | Shutdown hook for LMDB lock cleanup | `(.addShutdownHook ...)` |
-| G5 | Document JSON API + Hermes integration | In README |
+| # | Item | Description | Status |
+|---|------|-------------|--------|
+| G1 | README.md at repo root | Project overview, quick start, architecture, dev setup | Done |
+| G2 | Maven coord for Datalevin | `datalevin/datalevin {:mvn/version "0.10.18"}` replaces Nix uberjar path | Done |
+| G3 | `graph-expand` returns `[{:id :title}]` | Currently returns just IDs | Done |
+| G4 | Shutdown hook for LMDB lock cleanup | `(.addShutdownHook ...)` | Done |
+| G5 | Document JSON API + Hermes integration | In README + AGENTS.md | Done |
 
 ### Execution order
 
@@ -277,7 +277,7 @@ rm -rf /tmp/datom-db /tmp/datom-search /tmp/datom-test-db /tmp/datom-test-search
 
 ### Dependencies
 
-- **Datalevin**: Nix uberjar at `/nix/store/5ssvvfs6rzkdkwjj5i81b1mnfcd9mqhx-dtlv-0.10.18-uberjar.jar` (this-machine-specific path). G2 adds Maven coordinate as canonical fallback.
+- **Datalevin**: `datalevin/datalevin {:mvn/version "0.10.18"}` on Clojars. Previously Nix uberjar at a machine-specific store path.
 - **MCP toolkit**: git dep `com.noblepayne/mcp-toolkit` via `:mcp` alias.
 - **Test deps**: `http-kit`, `cheshire`, `mcp-toolkit` in `:test` alias.
 
@@ -291,8 +291,10 @@ rm -rf /tmp/datom-db /tmp/datom-search /tmp/datom-test-db /tmp/datom-test-search
 - **Thin transport** — MCP and JSON API are thin wrappers over the same core functions
 - **Incremental indexing** — never rebuild indices from scratch in a running server
 
-## Known Issues (pre-MVP)
+## Post-MVP
 
-- Phase E (Hermes Python plugin) not yet implemented
-- G1 (README.md at repo root) not yet done
-- G2 (Maven coord for Datalevin) not yet done
+- Fact extraction at write time (LLM-based, Mem0-style)
+- Transcript adapter (podcasts, YouTube captions)
+- Logseq interop (file-based .md adapter)
+- Memory tiers / compaction
+- Upgrade embedding model (BGE-M3: 1024 dims, 8K tokens)
