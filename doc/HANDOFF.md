@@ -4,7 +4,7 @@ datom is a composable agent memory system built on Datalevin. Hybrid fulltext + 
 
 ## Current State
 
-**Phase 1 is functional.** All core modules compile, the MCP server runs, and an end-to-end integration test passes (4 tests, 14 assertions, 0 failures).
+**MVP is nearly complete (Phases A-D, F, G done).** 9 tests, 46 assertions, 0 failures. Only Phase E (Hermes plugin) remains.
 
 ### What's built
 
@@ -12,20 +12,22 @@ datom is a composable agent memory system built on Datalevin. Hybrid fulltext + 
 - Vector search (HNSW via Datalevin `new-vector-index`, 384-dim default embedding, cosine metric)
 - RRF fusion (k=60) combining both rankings
 - Paragraph-level chunking (max-chars 2000, overlap 200)
-- Graph extraction (markdown link parsing, `:content/depends` canonical, 1-hop neighbors/dependents)
+- Graph extraction (markdown link parsing, `:content/depends` canonical, 1-hop neighbors/dependents with titles)
 - ContentSource protocol for pluggable ingest adapters (LUDS markdown reference impl)
-- `:content/depends` canonical attribute — no source-specific key leakage into graph module
-- 9 public primitives: `store-init`, `ingest`, `search`, `answer`, `context`, `graph-expand`, `lookup`, `stats`, `compact` (placeholder)
-- MCP server with 7 tools: search, answer, context, lookup, stats, graph-expand, ingest-luds
-- CLI entry point (`-main`)
+- 9 public primitives: `store-init`, `ingest`, `search`, `answer`, `context`, `graph-expand`, `lookup`, `stats`, `remember`, `forget`
+- MCP server with 9 tools: search, answer, context, lookup, stats, graph-expand, ingest-luds, remember, forget
+- JSON HTTP API on port 9091: 5 routes (search, answer, remember, forget, stats)
+- CLI entry point (`-main`) for MCP server
 - Separate `init-search!` (server startup — load persisted indices) and `index-docs!` (incremental — add only new docs)
+- Shutdown hooks for LMDB cleanup
+- `store/close!` for graceful connection teardown
 
 ### Module map
 
 ```
-datom.mcp (MCP server, port 9090)
+datom.mcp (MCP server, port 9090)     datom.api (JSON HTTP API, port 9091)
   └── datom.core (orchestrator)
-        ├── datom/store.clj    schema, LMDB connections, CRUD
+        ├── datom/store.clj    schema, LMDB connections, CRUD, close!
         ├── datom/chunk.clj    paragraph splitting with overlap (pure, no deps)
         ├── datom/index.clj    fulltext + vector + RRF fusion
         ├── datom/graph.clj    link extraction, neighbors, dependents
@@ -33,18 +35,6 @@ datom.mcp (MCP server, port 9090)
         ├── datom/ingest.clj   ContentSource protocol + generic ingest
         └── datom/ingest/luds.clj  LUDS markdown adapter
 ```
-
-### Uncommitted state
-
-The working tree has uncommitted changes. See `git diff` for details. Key changes since initial commit:
-
-- `store.clj` — added `:content/depends` to schema
-- `ingest/luds.clj` — populates `:content/depends` (canonical) instead of source-specific key
-- `graph.clj` — uses generic `:content/depends`, no LUDS-specific key knowledge
-- `index.clj` — new `index-docs!` for incremental indexing
-- `ingest.clj` — returns `{:ids [...] :total N :chunks M}` summary, no longer calls `index!`
-- `core.clj` — `ingest` calls `init-search!` + `index-docs!`, returns `sys` for threading
-- `mcp.clj` — `ingest-luds` tool, cheshire encoder for `java.time.Instant`
 
 ## Architecture
 
@@ -132,11 +122,11 @@ Thin Ring/http-kit server on port 9091 sharing the same `datom.core` functions.
 
 | # | Route | Maps to | Returns |
 |---|-------|---------|---------|
-| D1 | `POST /api/search` | `datom/search` | Search results |
-| D2 | `POST /api/remember` | `datom/remember` | `{:id "..."}` |
-| D3 | `POST /api/forget` | `datom/forget` | `{:deleted true}` |
-| D4 | `POST /api/lookup` | `datom/lookup` | Doc entity |
-| D5 | `POST /api/stats` | `datom/stats` | Stats map |
+| D1 | `GET /api/stats` | `datom/stats` | Stats map |
+| D2 | `POST /api/search` | `datom/search` | `{:results [...]}` |
+| D3 | `POST /api/answer` | `datom/answer` | `{:answer "..."}` |
+| D4 | `POST /api/remember` | `datom/remember` | `{:id "..."}` |
+| D5 | `POST /api/forget` | `datom/forget` | `{:deleted true}` |
 
 Zero business logic duplication — MCP tools and JSON handlers both call `datom.core`.
 
@@ -250,7 +240,15 @@ ss -tlnp | grep 9090
 
 ### JSON API Server
 
-(After Phase D) — port 9091, same start/stop pattern.
+```
+# Start
+setsid clojure -M:api 9091 > /dev/shm/datom-api.log 2>&1 &
+
+# Kill
+fuser -k 9091/tcp
+```
+
+Port: **9091**
 
 ### Tests
 
@@ -288,9 +286,6 @@ rm -rf /tmp/datom-db /tmp/datom-search /tmp/datom-test-db /tmp/datom-test-search
 
 ## Known Issues (pre-MVP)
 
-- Tests don't clean up LMDB dirs (F7)
-- `init-system!` TOCTOU race on concurrent first requests (B4)
-- All tool errors return `.getMessage t` with no stack trace (B5)
-- `graph-expand` returns just IDs, agents must call `lookup` N times (G3)
-- `(apply mapcat identity opts)` arg forwarding is fragile (A2)
-- Duplicated chunking between `ingest.clj` and `chunk.clj` (A1)
+- Phase E (Hermes Python plugin) not yet implemented
+- G1 (README.md at repo root) not yet done
+- G2 (Maven coord for Datalevin) not yet done
