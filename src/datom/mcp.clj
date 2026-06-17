@@ -16,9 +16,7 @@
 (defonce system (atom nil))
 
 (defn- init-system! []
-  (when (nil? @system)
-    (reset! system (-> (datom/store-init) index/init-search!)))
-  @system)
+  (swap! system #(or % (-> (datom/store-init) index/init-search!))))
 
 (defn- tool-search [sys {:keys [query top author expand]}]
   (let [opts (cond-> {}
@@ -73,9 +71,11 @@
     "initialize"
     {:jsonrpc "2.0" :id (:id msg)
      :result {:protocolVersion "2025-11-25"
-              :capabilities {:tools {:listChanged true}}
+              :capabilities {}
               :serverInfo {:name "datom-mcp" :version "0.1.0"}
               :sessionId session-id}}
+    "notifications/initialized"
+    nil
     "tools/list"
     {:jsonrpc "2.0" :id (:id msg)
      :result {:tools (mapv #(select-keys % [:name :description :inputSchema]) tools)}}
@@ -87,10 +87,11 @@
           {:jsonrpc "2.0" :id (:id msg)
            :result {:content [{:type "text" :text ((:handler tool) sys arguments)}]}}
           (catch Throwable t
+            (.printStackTrace t)
             {:jsonrpc "2.0" :id (:id msg)
-             :result {:content [{:type "text" :text (str "Error: " (.getMessage t))}] :isError true}}))
+             :error {:code -32603 :message "Internal error" :data (str t)}}))
         {:jsonrpc "2.0" :id (:id msg)
-         :result {:content [{:type "text" :text (str "Unknown tool: " name)}] :isError true}}))
+         :error {:code -32602 :message "Unknown tool" :data (str "Unknown tool: " name)}}))
     nil))
 
 (defn start-server [sys & [{:keys [port host] :or {port 0 host "127.0.0.1"}}]]
