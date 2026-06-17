@@ -10,8 +10,8 @@
   (:gen-class))
 
 (json-gen/add-encoder Instant
-  (fn [inst jg]
-    (.writeString jg (str inst))))
+                      (fn [inst jg]
+                        (.writeString jg (str inst))))
 
 (defonce system (atom nil))
 
@@ -21,18 +21,18 @@
   @system)
 
 (defn- tool-search [sys {:keys [query top author expand]}]
-  (let [opts (cond-> []
-               top    (conj :top (int top))
-               author (conj :author author)
-               expand (conj :expand (int expand)))]
-    (json/generate-string (apply datom/search sys query opts))))
+  (let [opts (cond-> {}
+               top (assoc :top (int top))
+               author (assoc :author author)
+               expand (assoc :expand (int expand)))]
+    (json/generate-string (datom/search sys query opts))))
 
 (defn- tool-answer [sys {:keys [query]}]
   (datom/answer sys query))
 
 (defn- tool-context [sys {:keys [query top]}]
-  (let [opts (cond-> [] top (conj :top (int top)))]
-    (json/generate-string (apply datom/context sys query opts))))
+  (let [opts (cond-> {} top (assoc :top (int top)))]
+    (json/generate-string (datom/context sys query opts))))
 
 (defn- tool-lookup [sys {:keys [id]}]
   (json/generate-string (datom/lookup sys id)))
@@ -44,8 +44,8 @@
   (json/generate-string (datom/graph-expand sys id)))
 
 (defn- tool-ingest-luds [sys {:keys [path max-chars overlap]}]
-  (let [opts    {:max-chars (or (some-> max-chars int) 2000)
-                 :overlap   (or (some-> overlap int) 200)}
+  (let [opts {:max-chars (or (some-> max-chars int) 2000)
+              :overlap (or (some-> overlap int) 200)}
         summary (ingest/ingest sys (luds/dir-source path) opts)]
     (index/index-docs! sys (:ids summary))
     (json/generate-string summary)))
@@ -97,7 +97,7 @@
   (http/run-server (partial dispatch sys) {:port port :host host}))
 
 (defn -main [& args]
-  (let [sys  (init-system!)
+  (let [sys (init-system!)
         port (Long/parseLong (or (first args) (System/getenv "DATOM_MCP_PORT") "8080"))
         host (or (System/getenv "DATOM_MCP_HOST") "127.0.0.1")]
     (println "Starting datom-mcp on" (str host ":" port))
