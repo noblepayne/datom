@@ -6,7 +6,8 @@
             [datom.query :as query]
             [datom.ingest :as ingest]
             [datalevin.core :as dl]
-            [clojure.string :as str]))
+            [clojure.string :as str])
+  (:import [java.time Instant]))
 
 ;; ---------------------------------------------------------------------------
 ;; System
@@ -97,6 +98,38 @@
 ;; ---------------------------------------------------------------------------
 ;; Compact (placeholder — memory tiers)
 ;; ---------------------------------------------------------------------------
+
+;; ---------------------------------------------------------------------------
+;; Remember / Forget
+;; ---------------------------------------------------------------------------
+
+(defn remember
+  "Store a new document and index it. Returns {:id id}.
+   Assumes init-search! has been called on sys before this."
+  [sys {:keys [id title body type tags importance] :as _opts}]
+  (let [doc-id (or id (str (java.util.UUID/randomUUID)))
+        doc {:content/id doc-id
+             :content/title (or title "")
+             :content/body (or body "")
+             :content/type (or type "note")
+             :content/tags (or tags [])
+             :content/importance (or (some-> importance int) 0)
+             :content/ts (Instant/now)}]
+    (store/transact! sys [doc])
+    (index/index-docs! sys [doc-id])
+    {:id doc-id}))
+
+(defn forget
+  "Remove a document and its chunk children from the store.
+   Note: does not remove from search indices (best-effort only)."
+  [sys id]
+  (let [conn (::store/conn sys)
+        e (ffirst (dl/q '[:find ?e :in $ ?id :where [?e :content/id ?id]] @conn id))
+        chunk-es (map first (dl/q '[:find ?e :in $ ?id :where [?e :content/parent ?id]] @conn id))]
+    (when e
+      (doseq [e (cons e chunk-es)]
+        (dl/transact! conn [[:db.fn/retractEntity e]])))
+    {:deleted (some? e)}))
 
 (defn compact
   "Consolidate low-importance chunks. Placeholder for Phase 2."

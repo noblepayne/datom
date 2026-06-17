@@ -48,6 +48,12 @@
     (index/index-docs! sys (:ids summary))
     (json/generate-string summary)))
 
+(defn- tool-remember [sys {:keys [id title body type tags importance]}]
+  (json/generate-string (datom/remember sys {:id id :title title :body body :type type :tags tags :importance importance})))
+
+(defn- tool-forget [sys {:keys [id]}]
+  (json/generate-string (datom/forget sys id)))
+
 (def tools
   [{:name "search" :description "Hybrid fulltext + vector search" :handler tool-search
     :inputSchema {:type "object" :properties {:query {:type "string"} :top {:type "number"} :author {:type "string"} :expand {:type "number"}} :required ["query"]}}
@@ -62,7 +68,11 @@
    {:name "graph-expand" :description "Show 1-hop neighborhood" :handler tool-graph-expand
     :inputSchema {:type "object" :properties {:id {:type "string"}} :required ["id"]}}
    {:name "ingest-luds" :description "Ingest LUDS markdown specs from a directory" :handler tool-ingest-luds
-    :inputSchema {:type "object" :properties {:path {:type "string"} :max-chars {:type "number"} :overlap {:type "number"}} :required ["path"]}}])
+    :inputSchema {:type "object" :properties {:path {:type "string"} :max-chars {:type "number"} :overlap {:type "number"}} :required ["path"]}}
+   {:name "remember" :description "Store a new document" :handler tool-remember
+    :inputSchema {:type "object" :properties {:id {:type "string"} :title {:type "string"} :body {:type "string"} :type {:type "string"} :tags {:type "array" :items {:type "string"}} :importance {:type "number"}} :required []}}
+   {:name "forget" :description "Remove a document by ID" :handler tool-forget
+    :inputSchema {:type "object" :properties {:id {:type "string"}} :required ["id"]}}])
 
 (def tool-by-name (into {} (map (fn [t] [(:name t) t]) tools)))
 
