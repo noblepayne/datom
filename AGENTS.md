@@ -1,5 +1,38 @@
 # AGENTS.md — datom
 
+## Workflow Conventions
+
+### Tooling
+- **ALWAYS use clojure-dev tools** (`clojure-dev_read_file`, `clojure-dev_file_write`, `clojure-dev_clojure_edit`, etc.) — never use generic `read`/`edit`/`write` tools for Clojure files.
+- **Format** with `cljfmt` after every change: `cljfmt fix <file>`
+- **Lint** with `clj-kondo` after every change: `clj-kondo --lint <file>`
+- **Both must pass** before any commit.
+
+### Process
+- **PLAN → ACT → VERIFY** for every task. Plan first, execute, verify result.
+- **READ → EDIT → VERIFY** for every file change. Read the file first, understand context, edit, verify.
+- **Snapshot commits**: one commit per logical change. Each commit must leave tests green.
+- **Branch**: `feat/mvp` — all MVP work here.
+- **Sub-agents**: use `task` for complex multi-step work, but always review their output. Pass these conventions to them.
+- **Major features**: use a sub-agent to review before committing.
+
+### Testing
+- **Test-first mindset** — think about what the test should assert before writing the implementation (loose TDD).
+- **Mostly integration / e2e tests** — not exhaustive unit tests. Cover the roundtrip.
+- **"Not toooo many"** — judicious coverage, not death by testing.
+- **Green always** — never commit a failing test. Fix existing failures first.
+
+### Debugging & Design
+- **Socratic questioning** — ask "why does this work this way?", "what's the simplest path?", "what am I assuming?"
+- **Scientific debugging** — form a hypothesis, predict an outcome, test it, learn.
+- **Inspirations**: Rich Hickey (simplicity, composability), Hillel Wayne (formal methods thinking, clarity), Eric Normand (functional design, making implicit state explicit).
+
+### Code Style
+- **No comments in code** unless the intent cannot be expressed in the code itself.
+- **Data in, data out** — pure functions where possible.
+- **Imperative shell, functional core** — side effects at the boundary.
+- **Composable primitives** — sys-threading pattern.
+
 ## Quick Reference
 
 ### MCP Server
