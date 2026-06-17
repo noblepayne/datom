@@ -1,1 +1,0 @@
-["^ ","~:members",["^ ","<init>",["~#set",[["^ ","~:flags",["^2",["~:method","~:public"]]]]],"newEventLoopGroup",["^2",[["^ ","^3",["^2",["^4","^5","~:static"]]]]],"getClientSocketChannelClass",["^2",[["^ ","^3",["^2",["^4","^5","^7"]]]]],"getServerSocketChannelClass",["^2",[["^ ","^3",["^2",["^4","^5","^7"]]]]],"enableTriggeredMode",["^2",[["^ ","^3",["^2",["^4","^5","^7"]]]]]]]
