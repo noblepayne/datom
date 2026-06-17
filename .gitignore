@@ -3,3 +3,5 @@
 *.jar
 __pycache__/
 *.pyc
+.clj-kondo/.cache/
+docs/
