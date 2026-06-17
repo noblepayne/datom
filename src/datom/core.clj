@@ -61,14 +61,21 @@
 ;; Graph
 ;; ---------------------------------------------------------------------------
 
+(defn- enrich
+  [sys ids]
+  (mapv (fn [id]
+          (let [doc (store/lookup sys id)]
+            {:id id :title (:content/title doc "")}))
+        ids))
+
 (defn graph-expand
-  "Expand a node to show its full 1-hop neighborhood."
+  "Expand a node to show its full 1-hop neighborhood with titles."
   [sys id]
   (let [neighbors (graph/neighbors sys id)
         dependents (graph/dependents sys id)]
     {:id id
-     :neighbors neighbors
-     :dependents dependents}))
+     :neighbors (enrich sys neighbors)
+     :dependents (enrich sys dependents)}))
 
 ;; ---------------------------------------------------------------------------
 ;; Lookup

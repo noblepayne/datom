@@ -17,9 +17,9 @@
   "Which document ids depend on the given doc?"
   [sys id]
   (->> (dl/q '[:find ?id ?depends
-                :where [?e :content/id ?id]
-                       [?e :content/depends ?depends]]
-              @(::store/conn sys))
+               :where [?e :content/id ?id]
+               [?e :content/depends ?depends]]
+             @(::store/conn sys))
        (filter (fn [[_ deps]] (some #(= % id) deps)))
        (mapv first)))
 
