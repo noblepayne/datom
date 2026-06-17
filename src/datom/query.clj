@@ -6,22 +6,26 @@
             [datalevin.core :as dl]
             [clojure.string :as str]))
 
+(defn- filter-by-author
+  [sys ranked author]
+  (if-not author
+    ranked
+    (let [auth-ids (set (->> (dl/q '[:find ?id ?meta
+                                     :where [?e :content/id ?id]
+                                     [?e :content/meta ?meta]]
+                                   @(::store/conn sys))
+                             (filter (fn [[_ m]]
+                                       (let [authors (or (:authors m) (:datom.ingest.luds/authors m) [])]
+                                         (some #(= % author) authors))))
+                             (mapv first)))]
+      (filter #(auth-ids (:ref %)) ranked))))
+
 (defn search
   "Hybrid fulltext + vector search with RRF fusion.
    Options: :top, :author, :expand, :raw"
   [sys query {:keys [top author expand raw] :or {top 5 expand 0}}]
   (let [ranked (index/rrf-search sys query top)
-        ranked (if author
-                 (let [auth-ids (set (->> (dl/q '[:find ?id ?meta
-                                                  :where [?e :content/id ?id]
-                                                  [?e :content/meta ?meta]]
-                                                @(::store/conn sys))
-                                          (filter (fn [[_ m]]
-                                                    (let [authors (or (:authors m) (:datom.ingest.luds/authors m) [])]
-                                                      (some #(= % author) authors))))
-                                          (mapv first)))]
-                   (filter #(auth-ids (:ref %)) ranked))
-                 ranked)
+        ranked (filter-by-author sys ranked author)
         top-scored (take top ranked)
         top-ids (if (pos? expand)
                   (distinct (mapcat #(graph/neighbors sys (:ref %)) top-scored))
