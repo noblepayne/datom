@@ -1,10 +1,12 @@
 (ns datom.mcp-test
   (:require [clojure.test :refer :all]
             [datom.core :as datom]
+            [datom.index :as index]
             [datom.ingest.luds :as luds]
             [datom.mcp :as mcp]
             [cheshire.core :as json]
             [clojure.string :as str]
+            [clojure.java.io :as io]
             [org.httpkit.client :as http]))
 
 (defn- mcp-request [url sid method & {:keys [params]}]
@@ -23,10 +25,19 @@
   (let [resp @(http/delete url {:headers {"MCP-Session-Id" sid}})]
     (:status resp)))
 
+(defn- clean-db!
+  []
+  (io/delete-file "/tmp/datom-test-mcp-db" true)
+  (io/delete-file "/tmp/datom-test-mcp-search" true))
+
 (deftest smoke-test
-  (let [sys (-> (datom/store-init)
-                 (datom/ingest (luds/dir-source "test/fixtures/luds")))]
-    (let [stop-fn (mcp/start-server sys {:port 0})
+  (clean-db!)
+  (try
+    (let [sys (-> (datom/store-init {:datom.store/db-dir "/tmp/datom-test-mcp-db"
+                                     :datom.store/search-dir "/tmp/datom-test-mcp-search"})
+                  (index/init-search!)
+                  (datom/ingest (luds/dir-source "test/fixtures/luds")))
+          stop-fn (mcp/start-server sys {:port 0})
           port (-> stop-fn meta :local-port)
           url (str "http://127.0.0.1:" port "/mcp")]
       (testing "initialize creates session"
@@ -52,4 +63,6 @@
               (is (re-find #"lud" (str/lower-case body))))))
         (testing "DELETE /mcp terminates session"
           (is (= 200 (mcp-delete url sid)))))
-      (stop-fn))))
+      (stop-fn))
+    (finally
+      (clean-db!))))

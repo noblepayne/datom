@@ -22,13 +22,13 @@
 ;; ---------------------------------------------------------------------------
 
 (defn ingest
-  "Ingest items from a ContentSource. Chunks long docs, builds indices."
+  "Ingest items from a ContentSource. Chunks long docs, builds indices.
+   Assumes init-search! has been called on sys before this."
   [sys source & {:keys [max-chars overlap] :or {max-chars 2000 overlap 200}}]
   (let [opts (cond-> {} max-chars (assoc :max-chars max-chars) overlap (assoc :overlap overlap))
         summary (ingest/ingest sys source opts)]
-    (-> sys
-        (index/init-search!)
-        (index/index-docs! (:ids summary)))))
+    (index/index-docs! sys (:ids summary))
+    sys))
 
 ;; ---------------------------------------------------------------------------
 ;; Search
