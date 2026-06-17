@@ -134,7 +134,7 @@ See `doc/HANDOFF.md` for full plan. Summary:
 | B | MCP compliance | Done |
 | C | Write tools (remember/forget) | Done |
 | D | JSON API on 9091 | Done |
-| E | Hermes plugin | Pending |
+| E | Hermes plugin | Done |
 | F | Integration tests | Done (F1-F6) |
 | G | Polish (titles, shutdown hook) | Done |
 
@@ -142,7 +142,10 @@ See `doc/HANDOFF.md` for full plan. Summary:
 
 datom provides a **JSON HTTP API** on port 9091 (Phase D). The Hermes Python plugin (Phase E) in `plugins/memory/datom/` implements `MemoryProvider` ABC, calling `httpx.post()` against the JSON API. No MCP client in Python.
 
-Key hooks: `prefetch(query)` → `POST /api/search`, `sync_turn(user, assistant)` → `POST /api/remember`.
+Key hooks: `prefetch(query)` → `POST /api/search {query, top:5, expand:1}`, formatted as distilled facts; `sync_turn(user, assistant)` → `POST /api/remember` (non-blocking daemon thread); `on_pre_compress(messages)` saves relevant context before compression.
+
+Test command: `nix-shell -p python3Packages.pytest --run "python3 -m pytest plugins/memory/datom/test_provider.py -v"`
+35 tests (32 pass without httpx, 3 skip when httpx unavailable).
 
 ## Data Sources
 

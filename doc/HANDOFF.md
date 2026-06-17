@@ -134,30 +134,37 @@ Zero business logic duplication — MCP tools and JSON handlers both call `datom
 
 ```
 plugins/memory/datom/
-├── __init__.py       # DatomMemoryProvider + register()
-├── plugin.yaml       # name: datom, hooks: [sync_turn]
-└── README.md         # Setup instructions
+├── __init__.py       # DatomMemoryProvider + register(ctx)
+├── plugin.yaml       # name: datom, pip_dependencies: [httpx], hooks: [on_session_end]
+└── test_provider.py  # 35 unit tests (mock httpx client)
 ```
 
 Mappings:
-- `initialize()` — verify datom server is listening at `http://localhost:9091`
-- `get_tool_schemas()` — schemas for `search`, `remember`, `forget`, `lookup`, `stats`
-- `handle_tool_call(name, args)` → `httpx.post("http://localhost:9091/api/" + name, json=args)`
-- `prefetch(query)` → `POST /api/search {query, top:5, expand:1}` — return context text
-- `sync_turn(user, assistant)` → `POST /api/remember {body: "...", type: "conversation"}`
-- `shutdown()` — no-op
+- `initialize(session_id, hermes_home=)` — create httpx.Client, load config from `$HERMES_HOME/datom.json`, verify server at `http://localhost:9091`
+- `is_available()` — config checks only (env var, config file, default). No network calls.
+- `get_tool_schemas()` — 5 tools: `datom_search`, `datom_remember`, `datom_forget`, `datom_lookup`, `datom_stats`
+- `handle_tool_call(name, args)` → `httpx.post(base_url + "/api/" + name, json=args)`
+- `prefetch(query, session_id=)` → `POST /api/search {query, top:5, expand:1}` — distilled facts, ~200-500 token budget
+- `sync_turn(user, assistant, session_id=, messages=)` → `POST /api/remember` — non-blocking daemon thread
+- `on_pre_compress(messages)` — search + save context before compression, returns "" (ByteRover pattern)
+- `system_prompt_block()` — static provider info for system prompt
+- `shutdown()` — join daemon threads, close httpx client
 
-Implementation detail: the Hermes `MemoryProvider` ABC expects:
-- `MemoryProvider.name` (property)
-- `MemoryProvider.is_available()` (no network calls)
-- `MemoryProvider.initialize(session_id, **kwargs)` (receives `hermes_home`)
-- `MemoryProvider.get_tool_schemas()` → list of tool JSON schemas
-- `MemoryProvider.handle_tool_call(name, args)` → response
-- `MemoryProvider.get_config_schema()` → config field descriptors
-- `MemoryProvider.save_config(values, hermes_home)` → write config
-- Optional hooks: `prefetch`, `sync_turn`, `on_session_end`, `shutdown`
+Design decisions:
+- **All 5 tools** exposed — agent gets full memory control
+- **prefetch format**: title + 150-char snippet, max 5 items, distilled facts (Mem0/Zep consensus)
+- **sync_turn**: stores raw turn (user + assistant), no LLM extraction yet
+- **on_pre_compress**: saves relevant context to store, returns "" (trust retrieval)
+- **is_available**: no network calls per ABC contract
+- **Client injection**: constructor param enables unit tests (mock) and integration tests (real)
+- **Threading**: daemon threads + join for non-blocking sync_turn and on_pre_compress
 
-### Phase F — Tests
+Test command:
+```bash
+nix-shell -p python3Packages.pytest --run "python3 -m pytest plugins/memory/datom/test_provider.py -v"
+```
+
+Phase F — Tests
 
 Add as we go, don't defer all to the end. Key tests:
 
