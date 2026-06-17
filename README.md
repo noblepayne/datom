@@ -4,7 +4,61 @@ Composable agent memory — hybrid fulltext + vector search with graph neighbor 
 
 A Clojure memory server with a JSON HTTP API (port 9091) and an MCP server (port 9090). Ships with a [Hermes Agent](https://hermes-agent.nousresearch.com) memory provider plugin.
 
-## Quick Start
+## Nix
+
+```bash
+# Dev shell — all deps provided (JDK, Clojure, Python, clj-kondo, etc.)
+nix develop
+
+# Inside the dev shell:
+test-clojure          # Run Clojure tests (16 tests, 91 assertions)
+test-python           # Run Python plugin tests (35 tests)
+test-all              # Run both
+run-server [port]     # Start datom MCP server (default: 9090)
+lock                  # Regenerate clj-nix deps-lock.json
+build                 # nix build .
+
+# Build the server
+nix build .
+
+# Build the Hermes plugin
+nix build .#hermes-plugin
+
+# Or without entering dev shell:
+nix develop . --command test-clojure
+nix develop . --command test-python
+```
+
+### NixOS module
+
+```nix
+{ config, pkgs, lib, datom, ... }: {
+  imports = [ datom.nixosModules.default ];
+
+  services.datom = {
+    enable = true;
+    apiPort = 9091;    # Hermes plugin connects here
+    openFirewall = false;
+  };
+
+  # Wire into Hermes (loose coupling):
+  services.hermes-agent = {
+    enable = true;
+    configFile = pkgs.writeText "hermes-config.yaml" (builtins.toJSON {
+      # ... your Hermes config ...
+      memory.provider = "datom";
+    });
+  };
+
+  systemd.services.hermes-agent = {
+    after = [ "datom.service" ];
+    environment.HERMES_BUNDLED_PLUGINS =
+      "${config.services.datom.hermesPlugin}/plugins";
+  };
+}
+```
+
+## Quick Start (without Nix)
 
 ```bash
 # Start the server
@@ -62,14 +116,21 @@ Provides 5 tools (`datom_search`, `datom_remember`, `datom_forget`, `datom_looku
 ## Development
 
 ```bash
-# Run Clojure tests
-clojure -M:test -d test
+# Primary (Nix): enter dev shell with all tools
+nix develop
 
-# Run Python plugin tests
-nix-shell -p python3Packages.pytest --run "python3 -m pytest plugins/memory/datom/test_provider.py -v"
+# Inside dev shell:
+test-clojure          # 16 Clojure tests, 91 assertions
+test-python           # 35 Python tests (+3 skip without httpx)
+test-all              # both at once
+run-server 9090       # start MCP server
+lock                  # regenerate deps-lock.json
+build                 # nix build .
 
-# Start nREPL
-clojure -M:repl
+# Or without Nix:
+clojure -M:test -d test                                             # Clojure tests
+nix-shell -p python3Packages.pytest --run "python3 -m pytest ..."   # Python tests
+clojure -M:repl                                                      # nREPL on 7888
 ```
 
 ## Status
