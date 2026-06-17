@@ -12,37 +12,20 @@
 
 (defn ingest
   "Ingest items from a ContentSource into the store.
-   Chunks long documents. Returns {:ids [...] :total N :chunks M}.
+   Chunks long documents via chunk/chunk-doc. Returns {:ids [...] :total N :chunks M}.
    Does NOT update search indices — call index-docs! separately."
   [sys source & {:keys [max-chars overlap] :or {max-chars 2000 overlap 200}}]
-  (let [conn  (::store/conn sys)
+  (let [conn (::store/conn sys)
         items (source-items source)
-        ids   (atom [])]
+        ids (atom [])]
     (doseq [item items]
-      (let [body    (:content/body item)
-            chunks  (chunk/split body {:max-chars max-chars :overlap overlap})
-            chunks? (> (count chunks) 1)]
-        (if chunks?
-          (let [parent-id (:content/id item)
-                children  (mapv (fn [c]
-                                  (assoc item
-                                         :content/id (str parent-id "-chunk-" (:index c))
-                                         :content/body (:text c)
-                                         :content/parent parent-id
-                                         :content/chunk true
-                                         :content/ts (Instant/now)))
-                                (rest chunks))]
-            (swap! ids into (concat [parent-id] (map :content/id children)))
-            (dl/transact! conn (into [(assoc item
-                                             :content/body (:text (first chunks))
-                                             :content/chunk false
-                                             :content/ts (Instant/now))]
-                                     children)))
-          (do
-            (swap! ids conj (:content/id item))
-            (dl/transact! conn [(assoc item
-                                       :content/chunk false
-                                       :content/ts (Instant/now))])))))
+      (let [result (chunk/chunk-doc item :max-chars max-chars :overlap overlap)
+            now (Instant/now)
+            parent (assoc (:parent result) :content/chunk false :content/ts now)
+            children (mapv #(assoc % :content/ts now) (:chunks result))
+            all-docs (cons parent children)]
+        (swap! ids into (map :content/id all-docs))
+        (dl/transact! conn all-docs)))
     {:total (count items)
      :chunks (->> @ids (filter #(re-find #"-chunk-" %)) count)
-     :ids   @ids}))
+     :ids @ids}))
