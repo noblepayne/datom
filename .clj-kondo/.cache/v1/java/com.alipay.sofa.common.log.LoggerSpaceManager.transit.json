@@ -1,0 +1,1 @@
+["^ ","~:members",["^ ","<init>",["~#set",[["^ ","~:flags",["^2",["~:method","~:public"]]]]],"getLoggerBySpace",["^2",[["^ ","^3",["^2",["^4","^5","~:static"]]]]],"setLoggerLevel",["^2",[["^ ","^3",["^2",["^4","^5","^7"]]]]],"removeILoggerFactoryBySpaceName",["^2",[["^ ","^3",["^2",["^4","^5","^7"]]]]],"removeILoggerFactoryBySpaceId",["^2",[["^ ","^3",["^2",["^4","^5","^7"]]]]]]]

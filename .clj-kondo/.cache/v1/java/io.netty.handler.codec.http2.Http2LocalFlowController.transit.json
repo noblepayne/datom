@@ -1,0 +1,1 @@
+["^ ","~:members",["^ ","frameWriter",["~#set",[["^ ","~:flags",["^2",["~:method","~:public"]]]]],"receiveFlowControlledFrame",["^2",[["^ ","^3",["^2",["^4","^5"]]]]],"consumeBytes",["^2",[["^ ","^3",["^2",["^4","^5"]]]]],"unconsumedBytes",["^2",[["^ ","^3",["^2",["^4","^5"]]]]],"initialWindowSize",["^2",[["^ ","^3",["^2",["^4","^5"]]]]]]]

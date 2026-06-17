@@ -1,0 +1,1 @@
+["^ ","~:members",["^ ","PROTOCOL_RECEIVE_BUFFER_SIZE",["~#set",[["^ ","~:flags",["^2",["~:public","~:static","~:field","~:final"]]]]],"PROTOCOL_SEND_BUFFER_SIZE",["^2",[["^ ","^3",["^2",["^4","^5","^6","^7"]]]]],"SYSTEM_RECEIVE_BUFFER_SIZE",["^2",[["^ ","^3",["^2",["^4","^5","^6","^7"]]]]],"SYSTEM_SEND_BUFFER_SIZE",["^2",[["^ ","^3",["^2",["^4","^5","^6","^7"]]]]]]]
