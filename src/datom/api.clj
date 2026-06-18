@@ -42,6 +42,11 @@
             result (datom/forget sys (:id body))]
         (json-response 200 result))
 
+      [:post "/api/lookup"]
+      (let [body (read-body request)
+            doc (datom/lookup sys (:id body))]
+        (json-response 200 doc))
+
       (json-response 404 {:error "Not found"}))))
 
 (defn start-server [sys & [{:keys [port host] :or {port 0 host "127.0.0.1"}}]]
