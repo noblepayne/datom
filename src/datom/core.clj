@@ -128,13 +128,20 @@
     {:id doc-id}))
 
 (defn forget
-  "Remove a document and its chunk children from the store.
-   Note: does not remove from search indices (best-effort only)."
+  "Remove a document and its chunk children from store and search indices."
   [sys id]
   (let [conn (::store/conn sys)
+        se (::index/search-engine sys)
+        vi (::index/vec-index sys)
         e (ffirst (dl/q '[:find ?e :in $ ?id :where [?e :content/id ?id]] @conn id))
-        chunk-es (map first (dl/q '[:find ?e :in $ ?id :where [?e :content/parent ?id]] @conn id))]
+        chunk-es (map first (dl/q '[:find ?e :in $ ?id :where [?e :content/parent ?id]] @conn id))
+        all-ids (cons id (mapv (fn [e]
+                                 (first (dl/q '[:find ?cid :in $ ?e :where [?e :content/id ?cid]] @conn e)))
+                               chunk-es))]
     (when e
+      (doseq [doc-id all-ids]
+        (when se (try (dl/remove-doc se doc-id) (catch Throwable _)))
+        (when vi (try (dl/remove-vec vi doc-id) (catch Throwable _))))
       (doseq [e (cons e chunk-es)]
         (dl/transact! conn [[:db.fn/retractEntity e]])))
     {:deleted (some? e)}))
