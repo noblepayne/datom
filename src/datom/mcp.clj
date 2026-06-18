@@ -4,6 +4,7 @@
             [datom.ingest :as ingest]
             [datom.ingest.luds :as luds]
             [datom.store :as store]
+            [datom.config :as config]
             [mcp-toolkit.transport.streamable-http :as http]
             [cheshire.core :as json]
             [cheshire.generate :as json-gen])
@@ -110,8 +111,9 @@
 
 (defn -main [& args]
   (let [sys (init-system!)
-        port (Long/parseLong (or (first args) (System/getenv "DATOM_MCP_PORT") "8080"))
-        host (or (System/getenv "DATOM_MCP_HOST") "127.0.0.1")]
+        port (or (config/parse-int (first args))
+                 (config/parse-int (config/get-env "DATOM_MCP_PORT" "9090")))
+        host (config/get-env "DATOM_MCP_HOST" "127.0.0.1")]
     (println "Starting datom-mcp on" (str host ":" port))
     (start-server sys {:port port :host host})
     (.addShutdownHook (Runtime/getRuntime) (Thread. #(store/close! sys)))
