@@ -4,7 +4,7 @@ datom is a composable agent memory system built on Datalevin. Hybrid fulltext + 
 
 ## Current State
 
-**MVP is nearly complete (Phases A-D, F, G done).** 9 tests, 46 assertions, 0 failures. Only Phase E (Hermes plugin) remains.
+**MVP complete (Phases A-H).** 16 Clojure tests, 91 assertions, 38 Python tests, 0 failures.
 
 ### What's built
 
@@ -16,23 +16,26 @@ datom is a composable agent memory system built on Datalevin. Hybrid fulltext + 
 - ContentSource protocol for pluggable ingest adapters (LUDS markdown reference impl)
 - 9 public primitives: `store-init`, `ingest`, `search`, `answer`, `context`, `graph-expand`, `lookup`, `stats`, `remember`, `forget`
 - MCP server with 9 tools: search, answer, context, lookup, stats, graph-expand, ingest-luds, remember, forget
-- JSON HTTP API on port 9091: 5 routes (search, answer, remember, forget, stats)
+- JSON HTTP API on port 9091: 6 routes (search, answer, remember, forget, stats, lookup)
 - CLI entry point (`-main`) for MCP server
-- Separate `init-search!` (server startup — load persisted indices) and `index-docs!` (incremental — add only new docs)
-- Shutdown hooks for LMDB cleanup
-- `store/close!` for graceful connection teardown
+- `datom.config` — env var reading via `get-env` (wraps `System/getenv`, with-redefs-able)
+- `forget` removes from both fulltext and vector indices (`dl/remove-doc` + `dl/remove-vec`)
+- Nix flake with clj-nix package, Hermes plugin, NixOS module (inline in flake.nix), devShell
+- Graceful shutdown hooks for LMDB cleanup
+- `store/close!` for connection teardown
 
 ### Module map
 
 ```
 datom.mcp (MCP server, port 9090)     datom.api (JSON HTTP API, port 9091)
   └── datom.core (orchestrator)
-        ├── datom/store.clj    schema, LMDB connections, CRUD, close!
-        ├── datom/chunk.clj    paragraph splitting with overlap (pure, no deps)
-        ├── datom/index.clj    fulltext + vector + RRF fusion
-        ├── datom/graph.clj    link extraction, neighbors, dependents
-        ├── datom/query.clj    search, answer, context primitives
-        ├── datom/ingest.clj   ContentSource protocol + generic ingest
+        ├── datom/config.clj    env var reading, validation
+        ├── datom/store.clj     schema, LMDB connections, CRUD, close!
+        ├── datom/chunk.clj     paragraph splitting with overlap (pure, no deps)
+        ├── datom/index.clj     fulltext + vector + RRF fusion
+        ├── datom/graph.clj     link extraction, neighbors, dependents
+        ├── datom/query.clj     search, answer, context primitives
+        ├── datom/ingest.clj    ContentSource protocol + generic ingest
         └── datom/ingest/luds.clj  LUDS markdown adapter
 ```
 
@@ -58,6 +61,14 @@ datom.mcp (MCP server, port 9090)     datom.api (JSON HTTP API, port 9091)
 ├──────────────────────────────────────────────────────┤
 │  Datalevin (datalog + LMDB + search + vector)        │
 └──────────────────────────────────────────────────────┘
+```
+
+### Config flow
+
+```
+NixOS module options → env vars (DATOM_DB_DIR, DATOM_MCP_PORT, etc.)
+  → datom.config/get-env (Clojure fn, with-redefs-able)
+    → datom.store/store (merges into opts, test opts override)
 ```
 
 ### Naming conventions
@@ -103,22 +114,22 @@ Using **`2025-11-25`** — current stable Streamable HTTP with session-based han
 | B1 | Keep `2025-11-25` | `mcp.clj` | Current stable. No change. |
 | B2 | Handle `notifications/initialized` | `mcp.clj` | Return nil/ack |
 | B3 | Fix error responses | `mcp.clj` | JSON-RPC `:error` with codes, not `isError` |
-| B4 | Fix `init-system!` race | `mcp.clj` | `swap!` with `or`, TOCTOU fix |
-| B5 | Log stack traces | `mcp.clj` | Replace `.getMessage` with printStackTrace |
-| B6 | Remove `listChanged` cap | `mcp.clj` | Or implement notifications |
+| B4 | Fix `init-system!` race | `mcp.clj` | `defonce system (delay ...)` — single evaluation |
+| B5 | Log stack traces | `mcp.clj` | `.printStackTrace` instead of `.getMessage` |
+| B6 | Advertise `{:tools {}}` | `mcp.clj` | Capabilities in initialize response |
 
 ### Phase C — Write tools for agents
 
 | # | Item | File | Description |
 |---|------|------|-------------|
 | C1 | `remember` | `core.clj` + `mcp.clj` | Accept `{:id title body type tags importance}`, transact + index-docs! |
-| C2 | `forget` | `core.clj` + `mcp.clj` | Retract entity + remove from indices |
+| C2 | `forget` | `core.clj` + `mcp.clj` | Retract entity + remove from indices, search index cleanup |
 | C3 | `update` | (Phase 2) | Transact updated attrs, re-index |
 | C4 | `list-sources` | (Phase 2) | Available ContentSources |
 
 ### Phase D — JSON HTTP API (for Hermes plugin)
 
-Thin Ring/http-kit server on port 9091 sharing the same `datom.core` functions.
+Thin http-kit server on port 9091 sharing the same `datom.core` functions.
 
 | # | Route | Maps to | Returns |
 |---|-------|---------|---------|
@@ -127,6 +138,7 @@ Thin Ring/http-kit server on port 9091 sharing the same `datom.core` functions.
 | D3 | `POST /api/answer` | `datom/answer` | `{:answer "..."}` |
 | D4 | `POST /api/remember` | `datom/remember` | `{:id "..."}` |
 | D5 | `POST /api/forget` | `datom/forget` | `{:deleted true}` |
+| D6 | `POST /api/lookup` | `datom/lookup` | Document map |
 
 Zero business logic duplication — MCP tools and JSON handlers both call `datom.core`.
 
@@ -135,8 +147,8 @@ Zero business logic duplication — MCP tools and JSON handlers both call `datom
 ```
 plugins/memory/datom/
 ├── __init__.py       # DatomMemoryProvider + register(ctx)
-├── plugin.yaml       # name: datom, pip_dependencies: [httpx], hooks: [on_session_end]
-└── test_provider.py  # 35 unit tests (mock httpx client)
+├── plugin.yaml       # name: datom, pip_dependencies: [httpx] (no unimplemented hooks)
+└── test_provider.py  # 38 unit tests (mock httpx client)
 ```
 
 Mappings:
@@ -157,26 +169,23 @@ Design decisions:
 - **on_pre_compress**: saves relevant context to store, returns "" (trust retrieval)
 - **is_available**: no network calls per ABC contract
 - **Client injection**: constructor param enables unit tests (mock) and integration tests (real)
-- **Threading**: daemon threads + join for non-blocking sync_turn and on_pre_compress
+- **Threading**: daemon threads + locks for non-blocking sync_turn and on_pre_compress
 
 Test command:
 ```bash
-nix-shell -p python3Packages.pytest --run "python3 -m pytest plugins/memory/datom/test_provider.py -v"
+nix develop --command python3 -m pytest plugins/memory/datom/test_provider.py -v
 ```
 
-Phase F — Tests
+### Phase F — Tests
 
-Add as we go, don't defer all to the end. Key tests:
-
-| # | Test | When |
-|---|------|------|
-| F1 | Roundtrip: transact → lookup → assert body | Phase A |
-| F2 | Chunk boundaries: overlap=0, overflow, empty | Phase A |
-| F3 | Ingest → search → assert expected results | Phase A |
-| F4 | Linked docs → neighbors → correct 1-hop | Phase A |
-| F5 | `remember` → `lookup` via MCP | Phase C |
-| F6 | JSON API POST → response via http-kit | Phase D |
-| F7 | Randomized temp LMDB dirs, cleanup in finally | Phase A |
+| # | Test | Status |
+|---|------|--------|
+| F1 | Roundtrip: transact → lookup → assert body | Done |
+| F2 | Chunk boundaries: overlap=0, overflow, empty | Done |
+| F3 | Ingest → search → assert expected results | Done |
+| F4 | Linked docs → neighbors → correct 1-hop | Done |
+| F5 | `remember` → `lookup` via MCP | Done |
+| F6 | JSON API POST → response via http-kit | Done |
 
 ### Phase G — DX polish
 
@@ -188,31 +197,33 @@ Add as we go, don't defer all to the end. Key tests:
 | G4 | Shutdown hook for LMDB lock cleanup | `(.addShutdownHook ...)` | Done |
 | G5 | Document JSON API + Hermes integration | In README + AGENTS.md | Done |
 
-### Execution order
+### Phase H — Review findings
 
-```
-Phase A (core fixes) ─────────────────────┐
-                                          ├──→ F1-F4 (tests as we go)
-Phase B (MCP compliance) ────────────────┤
-                                          │
-Phase C (write tools: remember/forget) ──┤
-                                          │
-Phase D (JSON API on 9091) ──────────────┤
-                                          │
-Phase E (Hermes Python plugin) ──────────┤
-                                          │
-Phase G (polish: README, docs, hooks) ───┘
+4 code reviews (June 2026). ~40 issues identified. All critical/high items addressed:
 
-Phase F (tests) — incremental, alongside each phase
-```
+| # | Item | File | Status |
+|---|------|------|--------|
+| H1 | `datom.config` env var wrapper | `config.clj` | Done |
+| H2 | Remove hardcoded `/tmp` paths | `store.clj` | Done |
+| H3 | `init-system!` race → `defonce system (delay ...)` | `mcp.clj` | Done |
+| H4 | Advertise `{:tools {}}` in capabilities | `mcp.clj` | Done |
+| H5 | `stats` nil-conn guard | `core.clj` | Done |
+| H6 | `forget` search index removal | `core.clj` | Done |
+| H7 | Clean deps.edn (remove tools.cli, move nrepl) | `deps.edn` | Done |
+| H8 | `/api/lookup` route | `api.clj` | Done |
+| H9 | Plugin: `source`→`type`, remove fake hook | `__init__.py`, `plugin.yaml` | Done |
+| H10 | Inline NixOS module in flake.nix | `flake.nix` | Done |
+| H11 | Fix hermes-plugin lib dep | `flake.nix` | Done |
 
 ## Key Decisions
 
-- **MCP protocol version `2025-11-25`** — current stable Streamable HTTP with sessions. Not rolling back to `2024-11-05` (old HTTP+SSE transport) and not chasing `2026-07-28` RC (stateless, deletes sessions).
-- **MCP for agent tools (Claude Desktop, Cline) + JSON HTTP API for Hermes plugin** — not MCP for Hermes. Hermes plugin uses `httpx.post()` against a plain JSON endpoint; no MCP client code in Python.
-- **`remember`/`forget` write tools** needed before Hermes plugin can be built (sync_turn needs write path).
-- **`:content/depends` canonical** — graph module reads this generically. No source-specific key leak.
-- **Incremental indexing** — `index-docs!` adds only new document IDs. No full rebuild per ingest.
+- **MCP protocol version `2025-11-25`** — current stable Streamable HTTP with sessions.
+- **MCP for agent tools + JSON HTTP API for Hermes plugin** — not MCP for Hermes.
+- **`get-env` wraps `System/getenv`** — enables test mocking via `with-redefs`.
+- **`defonce system (delay ...)`** — single evaluation, no TOCTOU race on LMDB connections.
+- **Inline NixOS module** — flake can reference `self.packages` instead of fragile `default = null`.
+- **`:content/depends` canonical** — graph module reads this generically.
+- **Incremental indexing** — `index-docs!` adds only new document IDs.
 - **Randomized temp dirs per test** — LMDB is single-process, test dirs must not collide.
 
 ## Critical Context
@@ -220,13 +231,8 @@ Phase F (tests) — incremental, alongside each phase
 ### nREPL
 
 ```
-# Start (must use setsid so it survives session timeout)
 setsid clojure -M:repl > /tmp/datom-nrepl.log 2>&1 &
-
-# Verify
 ss -tlnp | grep 7888
-
-# Kill
 fuser -k 7888/tcp
 ```
 
@@ -235,24 +241,18 @@ Port: **7888**
 ### MCP Server
 
 ```
-# Start
 setsid clojure -M:mcp 9090 > /dev/shm/datom.log 2>&1 &
-
-# Kill
-fuser -k 9090/tcp
-
-# Verify
 ss -tlnp | grep 9090
+fuser -k 9090/tcp
 ```
+
+Port: **9090**
 
 ### JSON API Server
 
 ```
-# Start
 setsid clojure -M:api 9091 > /dev/shm/datom-api.log 2>&1 &
-
-# Kill
-fuser -k 9091/tcp
+ss -tlnp | grep 9091
 ```
 
 Port: **9091**
@@ -260,41 +260,55 @@ Port: **9091**
 ### Tests
 
 ```bash
+# Clojure (16 tests, 91 assertions)
+rm -rf /tmp/datom-*
 clojure -M:test -d test
-```
 
-Requires clean LMDB dirs if schema changed:
-```bash
-rm -rf /tmp/datom-db /tmp/datom-search /tmp/datom-test-db /tmp/datom-test-search
+# Python (38 tests)
+nix develop --command python3 -m pytest plugins/memory/datom/test_provider.py -v
 ```
 
 ### LMDB
 
 - **Single-process**: only one JVM can hold a path at a time.
-- **Paths**: `/tmp/datom-db` (datalog) and `/tmp/datom-search` (KV indices). Also `/tmp/datom-test-*` for tests.
+- **Paths**: Default `/tmp/datom-db` (datalog) and `/tmp/datom-search` (KV indices). Override via `DATOM_DB_DIR`/`DATOM_SEARCH_DIR`.
 - **Clean slate**: `rm -rf /tmp/datom-db /tmp/datom-search`
 - **Crash recovery**: stale `lock.mdb` files block reconnection. Manual cleanup needed.
 
 ### Dependencies
 
-- **Datalevin**: `datalevin/datalevin {:mvn/version "0.10.18"}` on Clojars. Previously Nix uberjar at a machine-specific store path.
+- **Datalevin**: `datalevin/datalevin {:mvn/version "0.10.18"}` on Clojars.
 - **MCP toolkit**: git dep `com.noblepayne/mcp-toolkit` via `:mcp` alias.
 - **Test deps**: `http-kit`, `cheshire`, `mcp-toolkit` in `:test` alias.
 
-## Design Principles
+## Post-MVP: Deferred Items
 
-- **Data in, data out** — pure functions, no side effects in core logic
-- **Imperative shell, functional core** — `datom.core` and `datom.mcp` orchestrate side effects; `datom.chunk`, `datom.graph` are pure
-- **Composable primitives** — sys-threading pattern, `core/ingest` returns `sys`
-- **Source-agnostic** — same schema for docs, RSS, YouTube, podcasts, agent sessions
-- **Adapter pattern** — ContentSource protocol, `reify`-based adapters
-- **Thin transport** — MCP and JSON API are thin wrappers over the same core functions
-- **Incremental indexing** — never rebuild indices from scratch in a running server
+These came from 4 code reviews (June 2026). Addressed the critical/high items; these remain for post-MVP.
 
-## Post-MVP
+### Security
+- **Body size limit on API** — `slurp` has no limit → OOM vector. Add `:max-body` to http-kit config: `{:port port :max-body 10485760}`. Trivial fix.
+- **Path traversal in ingest-luds** — Currently accepts any path. Must validate against allowed base directory. Needs design: what's the allowed base?
 
-- Fact extraction at write time (LLM-based, Mem0-style)
-- Transcript adapter (podcasts, YouTube captions)
-- Logseq interop (file-based .md adapter)
-- Memory tiers / compaction
-- Upgrade embedding model (BGE-M3: 1024 dims, 8K tokens)
+### Correctness
+- **Chunk children inherit `:content/depends`** — When a parent doc has `:content/depends`, its chunk children inherit it in the LUDS extract-links phase. This over-counts links. Needs careful review of `extract-links` in `datom.graph`.
+- **`update` write tool** — Transact updated attrs, re-index. Planned MCP tool, not yet implemented.
+
+### Protocol / Safety
+- **MCP session-id validation** — Currently unused/unchecked. Should validate on every request. Needs design (stored session IDs, TTL).
+- **LMDB lock file recovery** — Crash → stale `lock.mdb` → infinite restart loop on NixOS. Needs init script or systemd `ExecStartPre` to clean stale locks.
+
+### Observability
+- **Structured logging** — Currently `println` for startup banner only. Add proper logging (mulog or similar).
+
+### Concurrent access
+- **Concurrent access tests** — All tests run single-threaded. Need tests that exercise concurrent ingest/search/forget.
+
+### Hermes Plugin
+- **ABC inheritance** — `DatomMemoryProvider` should inherit from Hermes' `MemoryProvider` ABC. Currently duck-typed. Hermes dependency for the ABC import.
+- **`on_pre_compress` callback** — Relies on Hermes core fix #7192. Currently no-op returns `""`.
+
+### Feature Gaps
+- **Transcript adapter** — Podcasts (VTT/SRT), YouTube captions. New ContentSource.
+- **Logseq interop** — File-based `.md` adapter, block hierarchy, page refs.
+- **Memory tiers / compaction** — `compact` fn is a placeholder. Tiered storage (hot/warm/cold).
+- **Upgrade embedding model** — BGE-M3: 1024 dims, 8K tokens. Requires re-index.
