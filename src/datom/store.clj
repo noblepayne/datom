@@ -1,18 +1,19 @@
 (ns datom.store
   "Schema, connections, and document CRUD."
-  (:require [datalevin.core :as dl]))
+  (:require [datalevin.core :as dl]
+            [datom.config :as config]))
 
 (def schema
-  {:content/id         {:db/unique :db.unique/identity}
-   :content/type       {:db/index true}
-   :content/title      {:db/fulltext true}
-   :content/body       {:db/fulltext true}
-   :content/meta       {}
-   :content/depends    {}
-   :content/ts         {:db/index true}
-   :content/parent     {}
-   :content/chunk      {:db/index true}
-   :content/tags       {}
+  {:content/id {:db/unique :db.unique/identity}
+   :content/type {:db/index true}
+   :content/title {:db/fulltext true}
+   :content/body {:db/fulltext true}
+   :content/meta {}
+   :content/depends {}
+   :content/ts {:db/index true}
+   :content/parent {}
+   :content/chunk {:db/index true}
+   :content/tags {}
    :content/importance {}})
 
 (defn ensure-conn!
@@ -23,11 +24,12 @@
 (defn store
   "Initialize the full storage stack."
   ([opts]
-   (let [opts (merge {::db-dir     "/tmp/datom-db"
-                      ::search-dir "/tmp/datom-search"
+   (let [opts (merge {::db-dir (config/get-env "DATOM_DB_DIR" "/tmp/datom-db")
+                      ::search-dir (config/get-env "DATOM_SEARCH_DIR" "/tmp/datom-search")
                       ::dimensions 384
-                      ::metric     :cosine
-                      ::rrf-k      60} opts)
+                      ::metric :cosine
+                      ::rrf-k 60}
+                     opts)
          conn (ensure-conn! opts)
          lmdb (dl/open-kv (::search-dir opts))]
      {::conn conn ::lmdb lmdb ::opts opts}))
