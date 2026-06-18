@@ -83,7 +83,7 @@
     "initialize"
     {:jsonrpc "2.0" :id (:id msg)
      :result {:protocolVersion "2025-11-25"
-              :capabilities {}
+              :capabilities {:tools {}}
               :serverInfo {:name "datom-mcp" :version "0.1.0"}
               :sessionId session-id}}
     "notifications/initialized"
