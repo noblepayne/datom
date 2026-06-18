@@ -15,10 +15,10 @@
                       (fn [inst jg]
                         (.writeString jg (str inst))))
 
-(defonce system (atom nil))
+(defonce system (delay (-> (datom/store-init) index/init-search!)))
 
 (defn- init-system! []
-  (swap! system #(or % (-> (datom/store-init) index/init-search!))))
+  @system)
 
 (defn- tool-search [sys {:keys [query top author expand]}]
   (let [opts (cond-> {}
