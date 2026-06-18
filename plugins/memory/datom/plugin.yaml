@@ -3,5 +3,3 @@ version: 0.1.0
 description: "Datom composable agent memory — hybrid fulltext + vector search with graph expansion."
 pip_dependencies:
   - httpx
-hooks:
-  - on_session_end

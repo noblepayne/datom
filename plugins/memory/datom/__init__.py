@@ -44,7 +44,7 @@ TOOL_SCHEMAS = [
             "properties": {
                 "body": {"type": "string", "description": "Document content"},
                 "title": {"type": "string", "description": "Optional title"},
-                "source": {"type": "string", "description": "Source type (default general)"},
+                "type": {"type": "string", "description": "Document type (default note)"},
             },
             "required": ["body"],
         },
