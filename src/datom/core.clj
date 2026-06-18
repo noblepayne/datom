@@ -93,14 +93,15 @@
 (defn stats
   "System statistics."
   [sys]
-  (let [conn (::store/conn sys)
-        total (or (ffirst (dl/q '[:find (count ?e) :where [?e :content/body]] @conn)) 0)
-        chunks (or (ffirst (dl/q '[:find (count ?e) :where [?e :content/chunk true]] @conn)) 0)
-        types (dl/q '[:find ?type (count ?e) :where [?e :content/type ?type]] @conn)]
-    {:docs (- total chunks)
-     :chunks chunks
-     :total total
-     :sources (into {} types)}))
+  (if-let [conn (::store/conn sys)]
+    (let [total (or (ffirst (dl/q '[:find (count ?e) :where [?e :content/body]] @conn)) 0)
+          chunks (or (ffirst (dl/q '[:find (count ?e) :where [?e :content/chunk true]] @conn)) 0)
+          types (dl/q '[:find ?type (count ?e) :where [?e :content/type ?type]] @conn)]
+      {:docs (- total chunks)
+       :chunks chunks
+       :total total
+       :sources (into {} types)})
+    {:docs 0 :chunks 0 :total 0 :sources {}}))
 
 ;; ---------------------------------------------------------------------------
 ;; Compact (placeholder — memory tiers)
