@@ -47,11 +47,10 @@
 - **Why:** no *explicit* limit today; relies on http-kit's built-in decoder cap (~8MB default). Set an explicit, documented cap so the contract is deliberate and testable.
 - **Acceptance:** POST with payload > 10 MB returns 413; a test asserts the limit; cljfmt + clj-kondo pass.
 
-### M1.2 — LMDB lock recovery — S — no deps
-- **What:** systemd `ExecStartPre` (or service wrapper) removes stale `lock.mdb`/lock files before start; document manual `rm -rf` fallback.
-- **Why:** crash → stale lock → infinite restart loop on lattice. Ops-critical today.
-- **Acceptance:** `kill -9` the datom service, restart succeeds without manual intervention; the cleanup step is idempotent (safe when no stale lock exists).
-- **Note:** the service runs `ProtectSystem=strict` + `StateDirectory`, so stale-lock cleanup must run in `ExecStartPre` (root) against `cfg.dataDir`, not inside the service. Add an idempotency unit test for the cleanup step.
+### M1.2 — LMDB lock recovery — S — no deps — ✅ DONE (verified, no code)
+- **What:** ~~systemd `ExecStartPre` (or service wrapper) removes stale `lock.mdb`/lock files before start; document manual `rm -rf` fallback.~~
+- **Result (2026-08-05, SIGKILL gate test):** **self-heals — no code needed.** `systemctl kill -s KILL datom` → systemd auto-restarted (active in 21s), both ports up, **49 docs intact, zero lock errors in journal**. `lock.mdb` persists after every close (existence ≠ staleness) but POSIX fcntl locks die with the process and LMDB re-initializes the lock file on open. The "infinite restart loop" premise was a misdiagnosis (SPEC-01 empirical review).
+- **Ops runbook line:** if datom ever fails to start after a crash, `sudo systemctl restart datom` (Restart=on-failure handles it); manual fallback: `sudo rm -f /var/lib/datom/lock.mdb /var/lib/datom/search/lock.mdb` then start.
 
 ### M1.3 — Chunk children stop inheriting `:content/depends` — S — no deps
 - **What:** fix `extract-links` in `datom.graph` so chunk children don't inherit the parent doc's `:content/depends` (over-counted graph edges).
