@@ -11,6 +11,7 @@
    :content/meta {}
    :content/depends {}
    :content/ts {:db/index true}
+   :content/expires-at {:db/index true}
    :content/parent {}
    :content/chunk {:db/index true}
    :content/tags {}
