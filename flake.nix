@@ -185,6 +185,7 @@
                 ProtectHome = true;
                 ProtectSystem = "strict";
                 ReadWritePaths = [ cfg.dataDir ];
+                OOMScoreAdjust = 500;
               };
             };
 
