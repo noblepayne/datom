@@ -103,7 +103,7 @@
 ### M2.2 — TTL & expiry on auto-memories — S — no deps
 - **What:** `:content/ttl` (or a type-based default) on `remember`; expiry pass removes/quarantines expired docs from store + indices; `sync_turn` auto-memories get a conservative default TTL (e.g. 30 days).
 - **Why:** "expired" is one third of the debt warning; the forgetting problem is the #1 community frustration — explicit expiry beats implicit decay.
-- **Acceptance:** store a memory with ttl, run expiry → `lookup` nil, search excludes it, `stats` reports expired count.
+- **Acceptance:** store a memory with ttl, run expiry → `lookup` nil, search excludes it, `stats` reports expired count. **Plus TTL backfill:** existing `type=conversation` docs (no `:content/ttl` today) get a default TTL on the first expiry pass — otherwise "stop the bleeding" only stops future bleeding; the accrued pile stays eternal.
 
 ### M2.3 — Dedup of auto-memories — M — depends on M2.1
 - **What:** near-duplicate detection (normalized-text hash first, vector-similarity threshold second) before insert; keep newest, mark old superseded via `:content/supersedes`.
@@ -126,9 +126,13 @@
 
 *Why next: the comparison's verdict on datom's gap is blunt — "the theoretical advantage is unrealized until system_prompt_block actually queries the store." This is the 4-move plan's moves 2 and 3. It makes datom's injected context real before we stub MEMORY.md (M4.1).*
 
-### M3.1 — Live `system_prompt_block()` — M — no deps (plugin-side)
-- **What:** replace the hardcoded stub with a live query: top-N high-importance memories for the session, reusing the `prefetch` distillation format; budget ~500–1000 tokens (community consensus: core memory in context + retrieval for the rest); degrade gracefully to `""` when the server is down. **Budget note:** `_format_context` (prefetch) is documented at 200–500 tokens — the core-memory block and retrieval snippets are distinct budgets; reconcile explicitly in code.
+### M3.1 — Live `system_prompt_block()` — M — **3 hidden deps (audited)**
+- **What:** replace the hardcoded stub with a live query: top-N core memories for the session, reusing the `prefetch` distillation format; budget ~500–1000 tokens (community consensus: core memory in context + retrieval for the rest); degrade gracefully to `""` when the server is down. **Budget note:** `_format_context` (prefetch) is documented at 200–500 tokens — the core-memory block and retrieval snippets are distinct budgets; reconcile explicitly in code.
 - **Why:** the single most-cited unrealized advantage in the comparison; unlocks the two-tier architecture datom was built for.
+- **Hidden deps (verified against source, 2026-08-05):**
+  - (a) **Server capability missing:** `POST /api/search` requires `:query` — no query-less top-N path exists today. Need a new route (e.g. `/api/top` or empty-query semantics) — `index/rrf-search` on `""` is undefined (garbage ranking).
+  - (b) **"High-importance" selection is unimplementable:** `core.clj remember` defaults `:content/importance` to 0; `sync_turn` sends no importance → every auto-memory is importance 0. Needs a ranking decision: recency fallback and/or exclude `type=conversation` from injection (M2.2's per-type TTL gives this taxonomy).
+  - (c) **Unverified Hermes contract:** `system_prompt_block()` takes no args; "for the session" implies Hermes core must pass query/session — verify the call signature (10-min check) before starting; if core can't pass a query, design must be query-less top-N.
 - **Acceptance:** block content varies with store contents; output is token-budget-capped; mocked-httpx tests; server-down → `""` and no exception.
 
 ### M3.2 — `bootstrap_recall` hook — M — depends on M3.1
