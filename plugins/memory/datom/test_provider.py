@@ -384,6 +384,37 @@ def test_on_pre_compress_skips_non_user_messages():
 
 
 # ---------------------------------------------------------------------------
+# on_session_end
+# ---------------------------------------------------------------------------
+
+
+def test_on_session_end_persists_session(provider):
+    messages = [
+        {"role": "user", "content": "what is LNURL?"},
+        {"role": "assistant", "content": "LNURL is..."},
+        {"role": "system", "content": "ignore this"},
+    ]
+    provider.on_session_end(messages)
+    remember_calls = _wait_for_call(provider._client, "/api/remember")
+    assert len(remember_calls) >= 1
+    body = remember_calls[0][2]["body"]
+    assert "[End of session]" in body
+    assert "what is LNURL?" in body
+    assert "LNURL is..." in body
+    assert "ignore this" not in body  # system messages filtered
+    assert remember_calls[0][2]["title"] == "Session summary"
+
+
+def test_on_session_end_never_raises():
+    client = MockClient({})  # 404 → _post returns {}
+    p = DatomMemoryProvider(client=client)
+    p.on_session_end([])  # empty messages → early return
+    p.on_session_end([{"role": "user", "content": "hi"}])  # server down
+    p.on_session_end([{"role": "tool", "content": "result"}])  # no usable parts
+    # No exception raised — implicitly passes
+
+
+# ---------------------------------------------------------------------------
 # initialize (requires httpx)
 # ---------------------------------------------------------------------------
 

@@ -261,6 +261,49 @@ class DatomMemoryProvider:
             self._compress_thread.start()
         return ""
 
+    def on_session_end(self, messages: List[Dict[str, Any]]) -> None:
+        """Persist end-of-session summary before the gateway tears down.
+
+        Called only at session boundaries (explicit exit, /reset, gateway
+        expiry/shutdown), NOT after every turn. Flushes pending syncs, then
+        stores a distilled summary so in-flight context survives a restart.
+        Never raises — _post swallows errors and the manager try/excepts.
+        """
+        if not messages:
+            return
+
+        def _flush():
+            try:
+                parts = [
+                    str(m.get("content", "")).strip()
+                    for m in messages
+                    if m.get("role") in ("user", "assistant")
+                    and isinstance(m.get("content"), str)
+                    and m.get("content", "").strip()
+                ]
+                if not parts:
+                    return
+                summary = "\n\n".join(parts[-6:])
+                self._post(
+                    "/api/remember",
+                    {
+                        "body": f"[End of session]\n{summary}",
+                        "type": "conversation",
+                        "title": "Session summary",
+                    },
+                )
+            except Exception as e:
+                logger.warning("datom session-end flush failed: %s", e)
+
+        with self._sync_lock:
+            self._join_thread(self._sync_thread)
+        with self._compress_lock:
+            self._join_thread(self._compress_thread)
+        with self._sync_lock:
+            self._sync_thread = threading.Thread(target=_flush, daemon=True)
+            self._sync_thread.start()
+            self._join_thread(self._sync_thread, timeout=10.0)
+
     def shutdown(self) -> None:
         with self._sync_lock:
             self._join_thread(self._sync_thread)
