@@ -14,7 +14,7 @@ clj-nix.lib.mkCljApp {
       "-XX:MaxMetaspaceSize=128m"
       "-XX:MaxDirectMemorySize=64m"
       "-Xss512k"
-      "-Dorg.bytedeco.javacpp.maxPhysicalBytes=268435456"
+      "-Dorg.bytedeco.javacpp.maxPhysicalBytes=536870912"
     ];
   }];
 }
