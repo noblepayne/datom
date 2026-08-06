@@ -11,11 +11,19 @@
 (defn- temp-dir []
   (str "/tmp/datom-test-" (java.util.UUID/randomUUID)))
 
+(defn- seed-embed-model! [db-dir]
+  (let [src "/var/lib/datom/embed/multilingual-e5-small-Q8_0.gguf"
+        dst (str db-dir "/embed/multilingual-e5-small-Q8_0.gguf")]
+    (when (and (.exists (io/file src)) (not (.exists (io/file dst))))
+      (.mkdirs (io/file (str db-dir "/embed")))
+      (io/copy (io/file src) (io/file dst)))
+    db-dir))
+
 (defmacro with-temp-store
   [[sys-sym] & body]
   (let [db-dir (gensym "db-dir")
         search-dir (gensym "search-dir")]
-    `(let [~db-dir (temp-dir)
+    `(let [~db-dir (seed-embed-model! (temp-dir))
            ~search-dir (temp-dir)
            ~sys-sym (datom/store-init {:datom.store/db-dir ~db-dir
                                        :datom.store/search-dir ~search-dir})]

@@ -28,8 +28,16 @@
 (defn- temp-dir []
   (str "/tmp/datom-mcp-test-" (java.util.UUID/randomUUID)))
 
+(defn- seed-embed-model! [db-dir]
+  (let [src "/var/lib/datom/embed/multilingual-e5-small-Q8_0.gguf"
+        dst (str db-dir "/embed/multilingual-e5-small-Q8_0.gguf")]
+    (when (and (.exists (io/file src)) (not (.exists (io/file dst))))
+      (.mkdirs (io/file (str db-dir "/embed")))
+      (io/copy (io/file src) (io/file dst)))
+    db-dir))
+
 (deftest smoke-test
-  (let [db-dir (temp-dir)
+  (let [db-dir (seed-embed-model! (temp-dir))
         search-dir (temp-dir)]
     (try
       (let [sys (-> (datom/store-init {:datom.store/db-dir db-dir
@@ -68,7 +76,7 @@
         (io/delete-file search-dir true)))))
 
 (deftest test-remember-lookup
-  (let [db-dir (temp-dir)
+  (let [db-dir (seed-embed-model! (temp-dir))
         search-dir (temp-dir)]
     (try
       (let [sys (-> (datom/store-init {:datom.store/db-dir db-dir
