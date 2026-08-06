@@ -20,7 +20,10 @@
                                              :expansion-search 64})
            ::emb-provider (dl/new-embedding-provider
                            {:provider :default
-                            :dir (::store/db-dir opts)}))))
+                            :dir (::store/db-dir opts)
+                            :ctx-size (or (::store/ctx-size opts) 256)
+                            :batch-size (or (::store/batch-size opts) 1)
+                            :threads (or (::store/threads opts) 1)}))))
 
 (defn index-docs!
   "Add specific documents to fulltext + vector indices. Incremental.

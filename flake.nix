@@ -186,6 +186,11 @@
                 ProtectSystem = "strict";
                 ReadWritePaths = [ cfg.dataDir ];
                 OOMScoreAdjust = 500;
+                # Bound real RSS: heap cap alone doesn't cover native
+                # (ggml/JavaCPP/mmap). Kernel-enforced cgroup v2 limit so
+                # datom can never exhaust the 3.7GiB box; Restart recovers.
+                MemoryHigh = "700M";
+                MemoryMax = "900M";
               };
             };
 
