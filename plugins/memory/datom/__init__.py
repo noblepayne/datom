@@ -185,8 +185,27 @@ class DatomMemoryProvider:
 
     def system_prompt_block(self) -> str:
         return (
-            "# Datom Memory\n"
-            "Active. Use datom_search for recall, datom_remember to store.\n"
+            "# Datom Memory - Usage Contract\n"
+            "Active. Datom is our composable memory store; prefer it over flat-file\n"
+            "MEMORY.md / USER.md for durable cross-session facts.\n"
+            "\n"
+            "When to store:\n"
+            "- datom_remember: durable facts, decisions, preferences, project state\n"
+            "  that must survive across sessions (prefers distilled summaries over raw\n"
+            "  transcripts; ~200-500 token entries).\n"
+            "- MEMORY.md (tool memory): only operational/incident notes from this\n"
+            "  session run.\n"
+            "- USER.md (tool user_profile): only the human's profile, not project state.\n"
+            "\n"
+            "When to recall:\n"
+            "- Start of session: datom_search on the task at hand to rehydrate context\n"
+            "  before answering. Flat files do not carry the full load.\n"
+            "- Mid-task: datom_search before user_profile edits to avoid duplicate.\n"
+            "  Orphaned or stale facts: datom_forget.\n"
+            "\n"
+            "Concurrency: datom persists asynchronously - after a datom_remember you may\n"
+            "need to wait a beat before datom_search sees it.\n"
+            "\n"
             "Tools: datom_search, datom_remember, datom_forget, datom_lookup, datom_stats"
         )
 
