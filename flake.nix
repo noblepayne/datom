@@ -213,6 +213,7 @@
                 ProtectHome = true;
                 ProtectSystem = "strict";
                 ReadWritePaths = [ cfg.dataDir ];
+                EnvironmentPath = "${pkgs.jdk}/bin";
                 OOMScoreAdjust = 500;
                 MemoryHigh = "700M";
                 MemoryMax = "900M";
