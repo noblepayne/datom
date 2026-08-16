@@ -156,6 +156,11 @@
           };
 
           config = lib.mkIf cfg.enable {
+            # Stage 0: Declarative directory creation with correct ownership
+            systemd.tmpfiles.rules = [
+              "d /var/lib/datom-backup 0750 ${cfg.user} ${cfg.group} -"
+            ];
+
             systemd.services.datom = {
               description = "Datom composable agent memory server";
               wantedBy = [ "multi-user.target" ];
