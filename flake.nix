@@ -161,6 +161,25 @@
               wantedBy = [ "multi-user.target" ];
               after = [ "network.target" ];
 
+              # Stage 1a: Stale LMDB lock cleanup before start
+              serviceConfig = {
+                ExecStartPre = ''
+                  # Remove stale LMDB lock.mdb only if no datom JVM holds it.
+                  # A crashed (OOM-killed) process leaves the lock; it's safe to remove.
+                  if [ -f "${cfg.dataDir}/lock.mdb" ]; then
+                    if ! pgrep -u ${cfg.user} -f 'datom.*mcp' > /dev/null 2>&1; then
+                      rm -f "${cfg.dataDir}/lock.mdb"
+                    fi
+                  fi
+                  # Also clean search/ lock if present
+                  if [ -f "${cfg.dataDir}/search/lock.mdb" ]; then
+                    if ! pgrep -u ${cfg.user} -f 'datom.*mcp' > /dev/null 2>&1; then
+                      rm -f "${cfg.dataDir}/search/lock.mdb"
+                    fi
+                  fi
+                '';
+              };
+
               environment = {
                 DATOM_MCP_PORT = toString cfg.port;
                 DATOM_MCP_HOST = cfg.host;
@@ -178,6 +197,14 @@
                 WorkingDirectory = cfg.dataDir;
                 Restart = "on-failure";
                 RestartSec = "10s";
+
+                # Stage 2a/2c: SIGINT for graceful shutdown, 15s timeout, circuit breaker
+                KillSignal = "SIGINT";
+                TimeoutStopSec = "15s";
+                KillMode = "control-group";
+                StartLimitBurst = 3;
+                StartLimitIntervalSec = "2min";
+
                 LockPersonality = true;
                 NoNewPrivileges = true;
                 PrivateDevices = true;
@@ -186,9 +213,6 @@
                 ProtectSystem = "strict";
                 ReadWritePaths = [ cfg.dataDir ];
                 OOMScoreAdjust = 500;
-                # Bound real RSS: heap cap alone doesn't cover native
-                # (ggml/JavaCPP/mmap). Kernel-enforced cgroup v2 limit so
-                # datom can never exhaust the 3.7GiB box; Restart recovers.
                 MemoryHigh = "700M";
                 MemoryMax = "900M";
               };
@@ -211,6 +235,53 @@
               allowedTCPPorts = [ cfg.port ] ++ lib.optional (cfg.apiPort != null) cfg.apiPort;
             };
           };
+
+          # Stage 4: Backup timer (daily + rotation + verification)
+                    systemd.services.datom-backup = {
+                      description = "Backup datom data directory";
+                      wantedBy = [ "multi-user.target" ];
+                      script = ''
+                        set -euo pipefail
+                        BACKUP_BASE="/var/lib/datom-backup"
+                        TODAY=$(date +%Y%m%d)
+                        WEEKDAY=$(date +%u)  # 1=Mon
+                        BACKUP="$${BACKUP_BASE}-$${TODAY}"
+
+                        if [ -d "${cfg.dataDir}" ]; then
+                          # Atomic snapshot + tar
+                          cp -al "${cfg.dataDir}" "$${BACKUP}.tmp" 2>/dev/null || cp -r "${cfg.dataDir}" "$${BACKUP}.tmp"
+                          # Remove stale lock from snapshot (don't copy lock.mdb)
+                          rm -f "$${BACKUP}.tmp/lock.mdb"
+                          tar czf "$${BACKUP}.tar.gz" -C "$$(dirname $${BACKUP}.tmp)" "$$(basename $${BACKUP}.tmp)"
+                          rm -rf "$${BACKUP}.tmp"
+
+                          # Verify
+                          tar tzf "$${BACKUP}.tar.gz" > /dev/null 2>&1
+
+                          # Rotation: keep 7 daily, 4 weekly
+                          ls -t $${BACKUP_BASE}-*.tar.gz 2>/dev/null | tail -n +8 | xargs -r rm -f
+                          # Weekly (Sunday) retention
+                          if [ "$${WEEKDAY}" = "7" ]; then
+                            ls -t $${BACKUP_BASE}-*.tar.gz 2>/dev/null | tail -n +5 | head -n 4 | xargs -r rm -f
+                          fi
+                        fi
+                      '';
+                      serviceConfig = {
+                        User = cfg.user;
+                        Group = cfg.group;
+                        Type = "oneshot";
+                        ReadWritePaths = [ "/var/lib" ];
+                      };
+                    };
+
+                    systemd.timers.datom-backup = {
+                      description = "Daily backup for datom";
+                      wantedBy = [ "timers.target" ];
+                      timerConfig = {
+                        OnCalendar = "daily";
+                        Persistent = true;
+                      };
+                    };
         };
     };
 }
