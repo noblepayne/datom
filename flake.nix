@@ -166,25 +166,21 @@
               wantedBy = [ "multi-user.target" ];
               after = [ "network.target" ];
 
-              # Stage 1a: Stale LMDB lock cleanup before start
-              serviceConfig = {
-                ExecStartPre = ''
-                  # Remove stale LMDB lock.mdb only if no datom JVM holds it.
-                  # A crashed (OOM-killed) process leaves the lock; it's safe to remove.
-                  if [ -f "${cfg.dataDir}/lock.mdb" ]; then
-                    if ! pgrep -u ${cfg.user} -f 'datom.*mcp' > /dev/null 2>&1; then
-                      rm -f "${cfg.dataDir}/lock.mdb"
-                    fi
+              preStart = ''
+                # Remove stale LMDB lock.mdb only if no datom JVM holds it.
+                # A crashed (OOM-killed) process leaves the lock; it's safe to remove.
+                if [ -f "${cfg.dataDir}/lock.mdb" ]; then
+                  if ! pgrep -u ${cfg.user} -f 'datom.*mcp' > /dev/null 2>&1; then
+                    rm -f "${cfg.dataDir}/lock.mdb"
                   fi
-                  # Also clean search/ lock if present
-                  if [ -f "${cfg.dataDir}/search/lock.mdb" ]; then
-                    if ! pgrep -u ${cfg.user} -f 'datom.*mcp' > /dev/null 2>&1; then
-                      rm -f "${cfg.dataDir}/search/lock.mdb"
-                    fi
+                fi
+                # Also clean search/ lock if present
+                if [ -f "${cfg.dataDir}/search/lock.mdb" ]; then
+                  if ! pgrep -u ${cfg.user} -f 'datom.*mcp' > /dev/null 2>&1; then
+                    rm -f "${cfg.dataDir}/search/lock.mdb"
                   fi
-                '';
-              };
-
+                fi
+              '';
               environment = {
                 DATOM_MCP_PORT = toString cfg.port;
                 DATOM_MCP_HOST = cfg.host;
@@ -254,6 +250,7 @@
                 Group = cfg.group;
                 Type = "oneshot";
                 ReadWritePaths = [ "/var/lib/datom-backup" ];
+                EnvironmentPath = "${pkgs.coreutils}/bin:/usr/bin";
               };
             };
 
