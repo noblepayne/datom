@@ -182,7 +182,7 @@
                   fi
                 fi
               '';
-              environment = {
+              environment = lib.mkForce {
                 DATOM_MCP_PORT = toString cfg.port;
                 DATOM_MCP_HOST = cfg.host;
                 DATOM_DB_DIR = cfg.dataDir;
