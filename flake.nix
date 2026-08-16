@@ -225,6 +225,7 @@
               wantedBy = [ "multi-user.target" ];
               script = ''
                 set -euo pipefail
+                export PATH="${pkgs.coreutils}/bin:${pkgs.gnutar}/bin:${pkgs.gzip}/bin:${pkgs.findutils}/bin:/usr/bin:$PATH"
                 BACKUP_DIR="/var/lib/datom-backup"
                 TODAY="$(date +%Y%m%d)"
                 WEEKDAY="$(date +%u)"  # 1=Mon
