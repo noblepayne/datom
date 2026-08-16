@@ -167,6 +167,7 @@
               after = [ "network.target" ];
 
               preStart = ''
+                export PATH="${pkgs.jdk}/bin:${pkgs.coreutils}/bin:${pkgs.gnutar}/bin:${pkgs.gzip}/bin:${pkgs.findutils}/bin:/usr/bin"
                 # Remove stale LMDB lock.mdb only if no datom JVM holds it.
                 # A crashed (OOM-killed) process leaves the lock; it's safe to remove.
                 if [ -f "${cfg.dataDir}/lock.mdb" ]; then
@@ -186,6 +187,7 @@
                 DATOM_MCP_HOST = cfg.host;
                 DATOM_DB_DIR = cfg.dataDir;
                 DATOM_SEARCH_DIR = "${cfg.dataDir}/search";
+                PATH = "${pkgs.jdk}/bin:${pkgs.coreutils}/bin:${pkgs.gnutar}/bin:${pkgs.gzip}/bin:${pkgs.findutils}/bin:/usr/bin";
               } // lib.optionalAttrs (cfg.apiPort != null) {
                 DATOM_API_PORT = toString cfg.apiPort;
               };
