@@ -250,7 +250,7 @@
                 Group = cfg.group;
                 Type = "oneshot";
                 ReadWritePaths = [ "/var/lib/datom-backup" ];
-                EnvironmentPath = "${pkgs.coreutils}/bin:/usr/bin";
+                EnvironmentPath = "${pkgs.coreutils}/bin:${pkgs.gnutar}/bin:${pkgs.gzip}/bin:${pkgs.findutils}/bin:/usr/bin";
               };
             };
 
