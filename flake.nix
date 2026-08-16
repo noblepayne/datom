@@ -218,6 +218,53 @@
               };
             };
 
+            # Stage 4: Backup timer (daily + rotation + verification)
+            systemd.services.datom-backup = {
+              description = "Backup datom data directory";
+              wantedBy = [ "multi-user.target" ];
+              script = ''
+                set -euo pipefail
+                BACKUP_BASE="/var/lib/datom-backup"
+                TODAY=$(date +%Y%m%d)
+                WEEKDAY=$(date +%u)  # 1=Mon
+                BACKUP="$${BACKUP_BASE}-$${TODAY}"
+
+                if [ -d "${cfg.dataDir}" ]; then
+                  # Atomic snapshot + tar
+                  cp -al "${cfg.dataDir}" "$${BACKUP}.tmp" 2>/dev/null || cp -r "${cfg.dataDir}" "$${BACKUP}.tmp"
+                  # Remove stale lock from snapshot (don't copy lock.mdb)
+                  rm -f "$${BACKUP}.tmp/lock.mdb"
+                  tar czf "$${BACKUP}.tar.gz" -C "$$(dirname $${BACKUP}.tmp)" "$$(basename $${BACKUP}.tmp)"
+                  rm -rf "$${BACKUP}.tmp"
+
+                  # Verify
+                  tar tzf "$${BACKUP}.tar.gz" > /dev/null 2>&1
+
+                  # Rotation: keep 7 daily, 4 weekly
+                  ls -t $${BACKUP_BASE}-*.tar.gz 2>/dev/null | tail -n +8 | xargs -r rm -f
+                  # Weekly (Sunday) retention
+                  if [ "$${WEEKDAY}" = "7" ]; then
+                    ls -t $${BACKUP_BASE}-*.tar.gz 2>/dev/null | tail -n +5 | head -n 4 | xargs -r rm -f
+                  fi
+                fi
+              '';
+              serviceConfig = {
+                User = cfg.user;
+                Group = cfg.group;
+                Type = "oneshot";
+                ReadWritePaths = [ "/var/lib" ];
+              };
+            };
+
+            systemd.timers.datom-backup = {
+              description = "Daily backup for datom";
+              wantedBy = [ "timers.target" ];
+              timerConfig = {
+                OnCalendar = "daily";
+                Persistent = true;
+              };
+            };
+
             users.users = lib.mkIf (cfg.user == "datom") {
               datom = {
                 inherit (cfg) group;
@@ -235,53 +282,6 @@
               allowedTCPPorts = [ cfg.port ] ++ lib.optional (cfg.apiPort != null) cfg.apiPort;
             };
           };
-
-          # Stage 4: Backup timer (daily + rotation + verification)
-                    systemd.services.datom-backup = {
-                      description = "Backup datom data directory";
-                      wantedBy = [ "multi-user.target" ];
-                      script = ''
-                        set -euo pipefail
-                        BACKUP_BASE="/var/lib/datom-backup"
-                        TODAY=$(date +%Y%m%d)
-                        WEEKDAY=$(date +%u)  # 1=Mon
-                        BACKUP="$${BACKUP_BASE}-$${TODAY}"
-
-                        if [ -d "${cfg.dataDir}" ]; then
-                          # Atomic snapshot + tar
-                          cp -al "${cfg.dataDir}" "$${BACKUP}.tmp" 2>/dev/null || cp -r "${cfg.dataDir}" "$${BACKUP}.tmp"
-                          # Remove stale lock from snapshot (don't copy lock.mdb)
-                          rm -f "$${BACKUP}.tmp/lock.mdb"
-                          tar czf "$${BACKUP}.tar.gz" -C "$$(dirname $${BACKUP}.tmp)" "$$(basename $${BACKUP}.tmp)"
-                          rm -rf "$${BACKUP}.tmp"
-
-                          # Verify
-                          tar tzf "$${BACKUP}.tar.gz" > /dev/null 2>&1
-
-                          # Rotation: keep 7 daily, 4 weekly
-                          ls -t $${BACKUP_BASE}-*.tar.gz 2>/dev/null | tail -n +8 | xargs -r rm -f
-                          # Weekly (Sunday) retention
-                          if [ "$${WEEKDAY}" = "7" ]; then
-                            ls -t $${BACKUP_BASE}-*.tar.gz 2>/dev/null | tail -n +5 | head -n 4 | xargs -r rm -f
-                          fi
-                        fi
-                      '';
-                      serviceConfig = {
-                        User = cfg.user;
-                        Group = cfg.group;
-                        Type = "oneshot";
-                        ReadWritePaths = [ "/var/lib" ];
-                      };
-                    };
-
-                    systemd.timers.datom-backup = {
-                      description = "Daily backup for datom";
-                      wantedBy = [ "timers.target" ];
-                      timerConfig = {
-                        OnCalendar = "daily";
-                        Persistent = true;
-                      };
-                    };
         };
     };
 }
