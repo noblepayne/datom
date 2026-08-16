@@ -224,20 +224,23 @@
               wantedBy = [ "multi-user.target" ];
               script = ''
                 set -euo pipefail
-                BACKUP_BASE="/var/lib/datom-backup"
+                BACKUP_DIR="/var/lib/datom-backup"
                 TODAY="$(date +%Y%m%d)"
                 WEEKDAY="$(date +%u)"  # 1=Mon
-                BACKUP="$BACKUP_BASE-$TODAY"
+                BACKUP_NAME="datom-$TODAY"
 
                 if [ -d "${cfg.dataDir}" ]; then
-                  cp -al "${cfg.dataDir}" "$BACKUP.tmp" 2>/dev/null || cp -r "${cfg.dataDir}" "$BACKUP.tmp"
-                  rm -f "$BACKUP.tmp/lock.mdb"
-                  tar czf "$BACKUP.tar.gz" -C "$(dirname $BACKUP.tmp)" "$(basename $BACKUP.tmp)"
-                  rm -rf "$BACKUP.tmp"
-                  tar tzf "$BACKUP.tar.gz" > /dev/null 2>&1
-                  ls -t "$BACKUP_BASE-"*.tar.gz 2>/dev/null | tail -n +8 | xargs -r rm -f
+                  cp -al "${cfg.dataDir}" "$BACKUP_DIR/$BACKUP_NAME.tmp" 2>/dev/null \
+                    || cp -r "${cfg.dataDir}" "$BACKUP_DIR/$BACKUP_NAME.tmp"
+                  rm -f "$BACKUP_DIR/$BACKUP_NAME.tmp/lock.mdb"
+                  tar czf "$BACKUP_DIR/$BACKUP_NAME.tar.gz" -C "$BACKUP_DIR" "$BACKUP_NAME.tmp"
+                  rm -rf "$BACKUP_DIR/$BACKUP_NAME.tmp"
+                  tar tzf "$BACKUP_DIR/$BACKUP_NAME.tar.gz" > /dev/null 2>&1
+
+                  # Rotation: keep 7 daily, 4 weekly (on Sunday)
+                  ls -t "$BACKUP_DIR"/datom-*.tar.gz 2>/dev/null | tail -n +8 | xargs -r rm -f
                   if [ "$WEEKDAY" = "7" ]; then
-                    ls -t "$BACKUP_BASE-"*.tar.gz 2>/dev/null | tail -n +5 | head -n 4 | xargs -r rm -f
+                    ls -t "$BACKUP_DIR"/datom-*.tar.gz 2>/dev/null | tail -n +5 | head -n 4 | xargs -r rm -f
                   fi
                 fi
               '';
@@ -245,7 +248,7 @@
                 User = cfg.user;
                 Group = cfg.group;
                 Type = "oneshot";
-                ReadWritePaths = [ "/var/lib" ];
+                ReadWritePaths = [ "/var/lib/datom-backup" ];
               };
             };
 
