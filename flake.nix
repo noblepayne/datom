@@ -224,7 +224,12 @@
                 PrivateTmp = true;
                 ProtectHome = true;
                 ProtectSystem = "strict";
-                ReadWritePaths = [ cfg.dataDir "${cfg.dataDir}/tmp" ];
+                # NOTE: no separate ReadWritePaths entry for {dataDir}/tmp —
+                # the parent dataDir grant already covers the subtree, and
+                # listing a not-yet-existing path here makes systemd fail
+                # mount namespacing (226/NAMESPACE) BEFORE ExecStartPre can
+                # create it. The pre-start script mkdirs it instead.
+                ReadWritePaths = [ cfg.dataDir ];
                 EnvironmentPath = "${pkgs.jdk}/bin";
                 OOMScoreAdjust = 500;
                 MemoryHigh = "700M";
