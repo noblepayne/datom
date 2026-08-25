@@ -166,34 +166,44 @@
               wantedBy = [ "multi-user.target" ];
               after = [ "network.target" ];
 
-              preStart = ''
-                export PATH="${pkgs.jdk}/bin:${pkgs.coreutils}/bin:${pkgs.gnutar}/bin:${pkgs.gzip}/bin:${pkgs.findutils}/bin:/usr/bin"
-                # Remove stale LMDB lock.mdb only if no datom JVM holds it.
-                # A crashed (OOM-killed) process leaves the lock; it's safe to remove.
-                if [ -f "${cfg.dataDir}/lock.mdb" ]; then
-                  if ! pgrep -u ${cfg.user} -f 'datom.*mcp' > /dev/null 2>&1; then
-                    rm -f "${cfg.dataDir}/lock.mdb"
-                  fi
-                fi
-                # Also clean search/ lock if present
-                if [ -f "${cfg.dataDir}/search/lock.mdb" ]; then
-                  if ! pgrep -u ${cfg.user} -f 'datom.*mcp' > /dev/null 2>&1; then
-                    rm -f "${cfg.dataDir}/search/lock.mdb"
-                  fi
-                fi
-              '';
-              environment = lib.mkForce {
+              environment = lib.mkForce ({
                 DATOM_MCP_PORT = toString cfg.port;
                 DATOM_MCP_HOST = cfg.host;
                 DATOM_DB_DIR = cfg.dataDir;
                 DATOM_SEARCH_DIR = "${cfg.dataDir}/search";
                 PATH = "${pkgs.jdk}/bin:${pkgs.coreutils}/bin:${pkgs.gnutar}/bin:${pkgs.gzip}/bin:${pkgs.findutils}/bin:/usr/bin";
+                # datalevin writes migration temp dirs to the PARENT of the
+                # DB dir; point them somewhere ReadWritePaths covers.
+                JAVA_OPTS = "-Ddatalevin.migration.temp.dir=${cfg.dataDir}/tmp";
               } // lib.optionalAttrs (cfg.apiPort != null) {
                 DATOM_API_PORT = toString cfg.apiPort;
-              };
+              });
 
               serviceConfig = {
                 ExecStart = lib.getExe cfg.package;
+                # Pre-start hygiene as a real derivation, NOT inline preStart
+                # text — inline content collides with ExecStartPre rendering
+                # and systemd rejects the unit (exit 203). Runs as root
+                # ("+" prefix): clears stale LMDB locks left by OOM-killed
+                # JVMs and creates the migration tmp dir with correct owner.
+                ExecStartPre = "+${pkgs.writeShellScript "datom-pre-start" ''
+                  export PATH="${pkgs.jdk}/bin:${pkgs.coreutils}/bin:${pkgs.gnutar}/bin:${pkgs.gzip}/bin:${pkgs.findutils}/bin:/usr/bin"
+                  # Remove stale LMDB lock.mdb only if no datom JVM holds it.
+                  # A crashed (OOM-killed) process leaves the lock; it's safe to remove.
+                  if [ -f "${cfg.dataDir}/lock.mdb" ]; then
+                    if ! pgrep -u ${cfg.user} -f 'datom.*mcp' > /dev/null 2>&1; then
+                      rm -f "${cfg.dataDir}/lock.mdb"
+                    fi
+                  fi
+                  # Also clean search/ lock if present
+                  if [ -f "${cfg.dataDir}/search/lock.mdb" ]; then
+                    if ! pgrep -u ${cfg.user} -f 'datom.*mcp' > /dev/null 2>&1; then
+                      rm -f "${cfg.dataDir}/search/lock.mdb"
+                    fi
+                  fi
+                  # Migration temp dir (datalevin targets parent of DB dir)
+                  install -d -m 0700 -o ${cfg.user} -g ${cfg.group} "${cfg.dataDir}/tmp"
+                ''}";
                 User = cfg.user;
                 Group = cfg.group;
                 StateDirectory = "datom";
@@ -214,7 +224,7 @@
                 PrivateTmp = true;
                 ProtectHome = true;
                 ProtectSystem = "strict";
-                ReadWritePaths = [ cfg.dataDir ];
+                ReadWritePaths = [ cfg.dataDir "${cfg.dataDir}/tmp" ];
                 EnvironmentPath = "${pkgs.jdk}/bin";
                 OOMScoreAdjust = 500;
                 MemoryHigh = "700M";
