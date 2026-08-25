@@ -50,7 +50,7 @@
       (json-response 404 {:error "Not found"}))))
 
 (defn start-server [sys & [{:keys [port host] :or {port 0 host "127.0.0.1"}}]]
-  (http/run-server (partial handler sys) {:port port :host host}))
+  (http/run-server (partial handler sys) {:ip host :port port}))
 
 (defn -main [& args]
   (let [sys (-> (datom/store-init) index/init-search!)

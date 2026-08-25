@@ -108,7 +108,10 @@
     nil))
 
 (defn start-server [sys & [{:keys [port host] :or {port 0 host "127.0.0.1"}}]]
-  (http/run-server (partial dispatch sys) {:port port :host host}))
+  ;; http-kit binds per :ip — :host is not a recognized option and is
+  ;; silently ignored, which left the API wildcard-bound regardless of
+  ;; DATOM_API_HOST. See http-kit docs (run-server options).
+  (http/run-server (partial dispatch sys) {:ip host :port port}))
 
 (defn -main [& args]
   (let [sys (init-system!)
